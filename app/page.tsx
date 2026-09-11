@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -15,58 +15,61 @@ import {
   MapPin,
   ShieldCheck,
   X,
-  Star,
   PackagePlus,
-  Image as ImageIcon,
+  Trash2,
+  Settings,
 } from "lucide-react";
 
 export interface Product {
   id: string;
   name: string;
   description: string;
-  fullDescription: string;
   price: number;
   category: string;
   image: string;
-  featured?: boolean;
-  variants?: string[];
 }
 
 const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorios", "Hogar"];
 
 export default function Home() {
-  // Arreglo inicial limpio listo para productos reales
   const [products, setProducts] = useState<Product[]>([]);
+  const [whatsappNumber, setWhatsappNumber] = useState("8091234567");
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState<{ [key: string]: { qty: number; variant?: string } }>({});
+  const [cart, setCart] = useState<{ [key: string]: number }>({});
   
   // Modales
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [activeVariant, setActiveVariant] = useState<string>("");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
-  // Formulario de nuevo producto
+  // Formulario Nuevo Producto
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState("");
   const [newProdCat, setNewProdCat] = useState("General");
   const [newProdDesc, setNewProdDesc] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
 
-  // Datos del cliente checkout
+  // Datos Checkout
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Transferencia / Depósito");
 
-  // Filtrado
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
-    const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.description.toLowerCase().includes(search.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Cargar productos y teléfono guardados en el navegador
+  useEffect(() => {
+    const savedProducts = localStorage.getItem("pediclick_products");
+    const savedPhone = localStorage.getItem("pediclick_phone");
+    if (savedProducts) {
+      try { setProducts(JSON.parse(savedProducts)); } catch (e) {}
+    }
+    if (savedPhone) setWhatsappNumber(savedPhone);
+  }, []);
+
+  // Guardar productos en el navegador
+  const saveProductsToStorage = (updated: Product[]) => {
+    setProducts(updated);
+    localStorage.setItem("pediclick_products", JSON.stringify(updated));
+  };
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,12 +80,11 @@ export default function Home() {
       name: newProdName,
       price: parseFloat(newProdPrice),
       category: newProdCat,
-      description: newProdDesc || "Sin descripción corta.",
-      fullDescription: newProdDesc || "Sin detalles adicionales.",
+      description: newProdDesc || "Sin descripción.",
       image: newProdImg || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
     };
 
-    setProducts((prev) => [createdProduct, ...prev]);
+    saveProductsToStorage([createdProduct, ...products]);
     setNewProdName("");
     setNewProdPrice("");
     setNewProdDesc("");
@@ -90,28 +92,50 @@ export default function Home() {
     setIsAddProductOpen(false);
   };
 
-  const updateQuantity = (id: string, delta: number, variant?: string) => {
+  const handleDeleteProduct = (id: string) => {
+    if (confirm("¿Deseas eliminar este producto del catálogo?")) {
+      const updated = products.filter((p) => p.id !== id);
+      saveProductsToStorage(updated);
+      
+      // Limpiar del carrito si estaba agregado
+      if (cart[id]) {
+        const { [id]: _, ...restCart } = cart;
+        setCart(restCart);
+      }
+    }
+  };
+
+  const handleSavePhone = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem("pediclick_phone", whatsappNumber);
+    setIsConfigOpen(false);
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
     setCart((prev) => {
-      const current = prev[id]?.qty || 0;
+      const current = prev[id] || 0;
       const updated = current + delta;
       if (updated <= 0) {
         const { [id]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [id]: { qty: updated, variant: variant || prev[id]?.variant || "" } };
+      return { ...prev, [id]: updated };
     });
   };
 
-  const totalItems = Object.values(cart).reduce((a, b) => a + b.qty, 0);
-  const totalPrice = Object.entries(cart).reduce((sum, [id, item]) => {
-    const product = products.find((p) => p.id === id);
-    return sum + (product ? product.price * item.qty : 0);
-  }, 0);
+  const filteredProducts = products.filter((p) => {
+    const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
+    const matchesSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.description.toLowerCase().includes(search.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
-  const openProductModal = (product: Product) => {
-    setSelectedProduct(product);
-    setActiveVariant(product.variants ? product.variants[0] : "");
-  };
+  const totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
+  const totalPrice = Object.entries(cart).reduce((sum, [id, qty]) => {
+    const product = products.find((p) => p.id === id);
+    return sum + (product ? product.price * qty : 0);
+  }, 0);
 
   const sendWhatsAppOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,24 +149,24 @@ export default function Home() {
     message += `💳 *Método de pago:* ${paymentMethod}\n\n`;
     
     message += `📦 *DETALLE DE ARTÍCULOS:*\n`;
-    Object.entries(cart).forEach(([id, item]) => {
+    Object.entries(cart).forEach(([id, qty]) => {
       const product = products.find((p) => p.id === id);
       if (product) {
-        const variantText = item.variant ? ` (${item.variant})` : "";
-        message += `▪️ *${item.qty}x* ${product.name}${variantText}\n   └ Subtotal: *$${(product.price * item.qty).toFixed(2)}*\n`;
+        message += `▪️ *${qty}x* ${product.name}\n   └ Subtotal: *$${(product.price * qty).toFixed(2)}*\n`;
       }
     });
 
     message += `\n─────────────────────────\n`;
     message += `💰 *TOTAL A PAGAR:* *$${totalPrice.toFixed(2)} USD*\n`;
 
-    window.open(`https://wa.me/8091234567?text=${encodeURIComponent(message)}`, "_blank");
+    const cleanPhone = whatsappNumber.replace(/\D/g, "");
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
     setIsCheckoutOpen(false);
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-32">
-      {/* Portada Limpia */}
+      {/* Portada */}
       <div className="relative h-60 sm:h-72 w-full bg-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-[#F8FAFC] via-slate-950/80 to-slate-950" />
       </div>
@@ -156,7 +180,6 @@ export default function Home() {
             <div className="relative group shrink-0">
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 p-[2px] shadow-xl shadow-slate-950/10">
                 <div className="w-full h-full bg-slate-950 rounded-[14px] flex flex-col items-center justify-center relative overflow-hidden">
-                  <div className="absolute -top-6 -right-6 w-12 h-12 bg-indigo-500/20 rounded-full blur-xl" />
                   <ShoppingBag className="w-7 h-7 text-indigo-400 mb-0.5" />
                   <div className="flex items-center gap-0.5 font-black text-sm tracking-tight text-white">
                     PediClick<span className="text-indigo-400">.</span>
@@ -175,26 +198,32 @@ export default function Home() {
                 <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Catálogo Oficial
                 </span>
+                <button
+                  onClick={() => setIsConfigOpen(true)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
+                  title="Configurar WhatsApp"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Catálogo digital en vivo. Realiza tu pedido directo por WhatsApp.
+                Catálogo digital directo por WhatsApp.
               </p>
 
-              {/* Badges */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-4 text-xs font-semibold">
                 <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 px-3 py-1 rounded-xl border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Pedidos Activos
+                  Disponible para Pedidos
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
-                  <Truck className="w-3.5 h-3.5 text-slate-400" /> Envíos Disponibles
+                  <Truck className="w-3.5 h-3.5 text-slate-400" /> Envíos Activos
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Buscador & Gestión */}
+        {/* Buscador y Controles */}
         <div className="mt-6 space-y-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -226,7 +255,7 @@ export default function Home() {
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     active
-                      ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15 scale-[1.02]"
+                      ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15"
                       : "bg-white text-slate-600 border border-slate-200/70 hover:bg-slate-50"
                   }`}
                 >
@@ -237,7 +266,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Productos o Estado Vacío */}
+        {/* Listado de Productos */}
         <div className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-black text-slate-950 text-lg tracking-tight">Catálogo de Productos</h2>
@@ -249,31 +278,27 @@ export default function Home() {
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-400">
                 <Info className="w-6 h-6" />
               </div>
-              <h3 className="text-slate-950 font-black text-base">No hay productos registrados</h3>
+              <h3 className="text-slate-950 font-black text-base">No hay productos aún</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
-                El catálogo está listo. Presiona el botón para agregar los primeros artículos a la tienda.
+                Haz clic en el botón para agregar productos reales al catálogo.
               </p>
               <button
                 onClick={() => setIsAddProductOpen(true)}
                 className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
               >
-                <PackagePlus className="w-4 h-4" /> Agregar Producto Ahora
+                <PackagePlus className="w-4 h-4" /> Agregar Producto
               </button>
             </div>
           ) : (
             filteredProducts.map((p) => {
-              const itemInCart = cart[p.id];
-              const qty = itemInCart?.qty || 0;
+              const qty = cart[p.id] || 0;
 
               return (
                 <div
                   key={p.id}
                   className="group bg-white p-4 rounded-3xl border border-slate-200/70 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col sm:flex-row gap-4 items-start sm:items-center relative overflow-hidden"
                 >
-                  <div 
-                    onClick={() => openProductModal(p)}
-                    className="relative w-full sm:w-28 h-40 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0 cursor-pointer"
-                  >
+                  <div className="relative w-full sm:w-28 h-40 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
                     <img
                       src={p.image}
                       alt={p.name}
@@ -281,10 +306,17 @@ export default function Home() {
                     />
                   </div>
 
-                  <div className="flex-1 min-w-0 pr-2 cursor-pointer" onClick={() => openProductModal(p)}>
-                    <h3 className="font-bold text-slate-950 text-base leading-snug group-hover:text-indigo-600 transition-colors">
-                      {p.name}
-                    </h3>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-bold text-slate-950 text-base leading-snug">{p.name}</h3>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        className="text-slate-300 hover:text-red-500 p-1 transition-colors"
+                        title="Eliminar producto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                     <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed line-clamp-2">
                       {p.description}
                     </p>
@@ -298,7 +330,7 @@ export default function Home() {
                     {qty === 0 ? (
                       <button
                         onClick={() => updateQuantity(p.id, 1)}
-                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
                       >
                         <Plus className="w-4 h-4" /> Añadir
                       </button>
@@ -306,14 +338,14 @@ export default function Home() {
                       <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
                         <button
                           onClick={() => updateQuantity(p.id, -1)}
-                          className="w-8 h-8 rounded-xl bg-white text-slate-950 flex items-center justify-center shadow-sm hover:bg-slate-200 transition-colors"
+                          className="w-8 h-8 rounded-xl bg-white text-slate-950 flex items-center justify-center shadow-sm hover:bg-slate-200"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <span className="font-black text-xs text-slate-950 w-4 text-center">{qty}</span>
                         <button
                           onClick={() => updateQuantity(p.id, 1)}
-                          className="w-8 h-8 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-sm hover:bg-indigo-600 transition-colors"
+                          className="w-8 h-8 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-sm hover:bg-indigo-600"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -331,19 +363,19 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* Modal para Agregar Producto Nuevo */}
+      {/* Modal Agregar Producto */}
       {isAddProductOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleAddProduct}
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col relative space-y-4"
+            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Agregar Producto al Catálogo</h3>
+              <h3 className="font-black text-slate-950 text-lg">Agregar Producto</h3>
               <button
                 type="button"
                 onClick={() => setIsAddProductOpen(false)}
-                className="bg-slate-100 hover:bg-slate-200 p-2 rounded-full text-slate-600 transition-colors"
+                className="bg-slate-100 p-2 rounded-full text-slate-600"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -351,28 +383,28 @@ export default function Home() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del producto *</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Zapatillas Deportivas"
+                  placeholder="Ej. Tenis Blancos"
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio (USD) *</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio ($) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
-                    placeholder="49.99"
+                    placeholder="35.00"
                     value={newProdPrice}
                     onChange={(e) => setNewProdPrice(e.target.value)}
-                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
                 <div>
@@ -380,7 +412,7 @@ export default function Home() {
                   <select
                     value={newProdCat}
                     onChange={(e) => setNewProdCat(e.target.value)}
-                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   >
                     {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -390,53 +422,92 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">URL de Imagen (Opcional)</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">URL de Foto (Opcional)</label>
                 <input
                   type="url"
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://..."
                   value={newProdImg}
                   onChange={(e) => setNewProdImg(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Descripción corta</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Descripción</label>
                 <textarea
                   rows={2}
-                  placeholder="Escribe brevemente sobre el producto..."
+                  placeholder="Detalles del producto..."
                   value={newProdDesc}
                   onChange={(e) => setNewProdDesc(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950 resize-none"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs resize-none"
                 />
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100">
+            <button
+              type="submit"
+              className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg"
+            >
+              Guardar en el Catálogo
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Configuración WhatsApp */}
+      {isConfigOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSavePhone}
+            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-black text-slate-950 text-base">Ajustes de Tienda</h3>
               <button
-                type="submit"
-                className="w-full bg-slate-950 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                type="button"
+                onClick={() => setIsConfigOpen(false)}
+                className="bg-slate-100 p-1.5 rounded-full text-slate-600"
               >
-                Guardar Producto en el Catálogo
+                <X className="w-4 h-4" />
               </button>
             </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Número de WhatsApp (con código de país):</label>
+              <input
+                type="text"
+                required
+                placeholder="Ej. 8091234567"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Aquí se enviarán los pedidos de los clientes.</p>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs"
+            >
+              Guardar Número
+            </button>
           </form>
         </div>
       )}
 
       {/* Modal Checkout */}
       {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={sendWhatsAppOrder}
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col relative space-y-4"
+            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Completar Datos de Envío</h3>
+              <h3 className="font-black text-slate-950 text-lg">Datos de Envío</h3>
               <button
                 type="button"
                 onClick={() => setIsCheckoutOpen(false)}
-                className="bg-slate-100 hover:bg-slate-200 p-2 rounded-full text-slate-600 transition-colors"
+                className="bg-slate-100 p-2 rounded-full text-slate-600"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -450,10 +521,10 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Juan Pérez"
+                  placeholder="Ej. Maria García"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
 
@@ -464,10 +535,10 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Calle Principal #12, Sector Central"
+                  placeholder="Ej. Calle Sol #4"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
 
@@ -478,24 +549,24 @@ export default function Home() {
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-950 outline-none focus:border-slate-950"
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 >
-                  <option value="Transferencia / Depósito">Transferencia / Depósito Bancario</option>
-                  <option value="Pago contra Entrega (Efectivo)">Pago contra Entrega (Efectivo)</option>
+                  <option value="Transferencia / Depósito">Transferencia / Depósito</option>
+                  <option value="Pago contra Entrega">Pago contra Entrega</option>
                 </select>
               </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total a Enviar</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total</span>
                 <span className="text-lg font-black text-slate-950">${totalPrice.toFixed(2)} USD</span>
               </div>
               <button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg transition-all"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg"
               >
-                Enviar Orden por WhatsApp <ArrowRight className="w-4 h-4" />
+                Enviar por WhatsApp <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
@@ -504,19 +575,19 @@ export default function Home() {
 
       {/* Botón Flotante */}
       {totalItems > 0 && (
-        <div className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto z-40 animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto z-40">
           <button
             onClick={() => setIsCheckoutOpen(true)}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between font-bold text-sm transition-all border border-emerald-400/30 backdrop-blur-lg"
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between font-bold text-sm border border-emerald-400/30 backdrop-blur-lg"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-700/60 flex items-center justify-center text-white font-black text-sm border border-white/20">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-700/60 flex items-center justify-center font-black text-sm border border-white/20">
                 {totalItems}
               </div>
               <div className="text-left">
-                <p className="text-xs text-emerald-100 font-medium leading-none">Confirmar selección</p>
+                <p className="text-xs text-emerald-100 font-medium leading-none">Confirmar pedido</p>
                 <p className="font-extrabold text-white text-sm mt-1 flex items-center gap-1">
-                  Continuar con la orden <ArrowRight className="w-4 h-4 ml-0.5" />
+                  Continuar orden <ArrowRight className="w-4 h-4 ml-0.5" />
                 </p>
               </div>
             </div>
