@@ -18,6 +18,13 @@ import {
   PackagePlus,
   Trash2,
   Settings,
+  Lock,
+  Unlock,
+  Flame,
+  Tag,
+  CheckCircle2,
+  Clock,
+  KeyRound,
 } from "lucide-react";
 
 export interface Product {
@@ -25,8 +32,10 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
   category: string;
   image: string;
+  badge?: "OFERTA" | "MÁS VENDIDO" | "NUEVO" | "NINGUNO";
 }
 
 const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorios", "Hogar"];
@@ -34,41 +43,67 @@ const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorio
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [whatsappNumber, setWhatsappNumber] = useState("8091234567");
+  const [adminPin, setAdminPin] = useState("1234");
+  const [isAdmin, setIsAdmin] = useState(false);
+  
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<{ [key: string]: number }>({});
-  
+
   // Modales
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+
+  // Campos Formulario Admin / PIN
+  const [inputPin, setInputPin] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const [newPin, setNewPin] = useState("");
 
   // Formulario Nuevo Producto
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState("");
+  const [newProdOrigPrice, setNewProdOrigPrice] = useState("");
   const [newProdCat, setNewProdCat] = useState("General");
+  const [newProdBadge, setNewProdBadge] = useState<"OFERTA" | "MÁS VENDIDO" | "NUEVO" | "NINGUNO">("NINGUNO");
   const [newProdDesc, setNewProdDesc] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
 
-  // Datos Checkout
+  // Datos Cliente Checkout
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Transferencia / Depósito");
 
-  // Cargar productos y teléfono guardados en el navegador
+  // Cargar datos locales al iniciar
   useEffect(() => {
     const savedProducts = localStorage.getItem("pediclick_products");
     const savedPhone = localStorage.getItem("pediclick_phone");
+    const savedPin = localStorage.getItem("pediclick_pin");
+
     if (savedProducts) {
       try { setProducts(JSON.parse(savedProducts)); } catch (e) {}
     }
     if (savedPhone) setWhatsappNumber(savedPhone);
+    if (savedPin) setAdminPin(savedPin);
   }, []);
 
-  // Guardar productos en el navegador
   const saveProductsToStorage = (updated: Product[]) => {
     setProducts(updated);
     localStorage.setItem("pediclick_products", JSON.stringify(updated));
+  };
+
+  // Autenticación de Administrador por PIN
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputPin === adminPin) {
+      setIsAdmin(true);
+      setIsAdminModalOpen(false);
+      setInputPin("");
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
   };
 
   const handleAddProduct = (e: React.FormEvent) => {
@@ -79,16 +114,20 @@ export default function Home() {
       id: Date.now().toString(),
       name: newProdName,
       price: parseFloat(newProdPrice),
+      originalPrice: newProdOrigPrice ? parseFloat(newProdOrigPrice) : undefined,
       category: newProdCat,
-      description: newProdDesc || "Sin descripción.",
+      badge: newProdBadge,
+      description: newProdDesc || "Sin descripción corta.",
       image: newProdImg || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
     };
 
     saveProductsToStorage([createdProduct, ...products]);
     setNewProdName("");
     setNewProdPrice("");
+    setNewProdOrigPrice("");
     setNewProdDesc("");
     setNewProdImg("");
+    setNewProdBadge("NINGUNO");
     setIsAddProductOpen(false);
   };
 
@@ -96,8 +135,6 @@ export default function Home() {
     if (confirm("¿Deseas eliminar este producto del catálogo?")) {
       const updated = products.filter((p) => p.id !== id);
       saveProductsToStorage(updated);
-      
-      // Limpiar del carrito si estaba agregado
       if (cart[id]) {
         const { [id]: _, ...restCart } = cart;
         setCart(restCart);
@@ -105,9 +142,14 @@ export default function Home() {
     }
   };
 
-  const handleSavePhone = (e: React.FormEvent) => {
+  const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem("pediclick_phone", whatsappNumber);
+    if (newPin.trim().length >= 4) {
+      localStorage.setItem("pediclick_pin", newPin);
+      setAdminPin(newPin);
+      setNewPin("");
+    }
     setIsConfigOpen(false);
   };
 
@@ -141,14 +183,16 @@ export default function Home() {
     e.preventDefault();
     if (totalItems === 0) return;
 
-    let message = `🛍️ *NUEVO PEDIDO - PEDICLICK STORE*\n`;
+    const orderId = Math.floor(1000 + Math.random() * 9000);
+    let message = `🛒 *NUEVA ORDEN DE COMPRA #${orderId}*\n`;
+    message += `*PediClick Store*\n`;
     message += `─────────────────────────\n\n`;
     
     if (customerName) message += `👤 *Cliente:* ${customerName}\n`;
     if (customerAddress) message += `📍 *Dirección:* ${customerAddress}\n`;
-    message += `💳 *Método de pago:* ${paymentMethod}\n\n`;
+    message += `💳 *Método de Pago:* ${paymentMethod}\n\n`;
     
-    message += `📦 *DETALLE DE ARTÍCULOS:*\n`;
+    message += `📦 *ARTÍCULOS SOLICITADOS:*\n`;
     Object.entries(cart).forEach(([id, qty]) => {
       const product = products.find((p) => p.id === id);
       if (product) {
@@ -157,7 +201,8 @@ export default function Home() {
     });
 
     message += `\n─────────────────────────\n`;
-    message += `💰 *TOTAL A PAGAR:* *$${totalPrice.toFixed(2)} USD*\n`;
+    message += `💰 *TOTAL A PAGAR:* *$${totalPrice.toFixed(2)} USD*\n\n`;
+    message += ` Quedo a la espera de la confirmación para realizar el pago.`;
 
     const cleanPhone = whatsappNumber.replace(/\D/g, "");
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
@@ -166,14 +211,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-32">
-      {/* Portada */}
+      {/* Portada Superior */}
       <div className="relative h-60 sm:h-72 w-full bg-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-[#F8FAFC] via-slate-950/80 to-slate-950" />
       </div>
 
       {/* Tarjeta Principal */}
       <div className="max-w-2xl mx-auto px-4 -mt-36 relative z-20">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
             
             {/* Logo */}
@@ -186,63 +231,73 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <span className="absolute -bottom-1 -right-1 bg-indigo-600 text-white rounded-full p-1 shadow-md border-2 border-white">
-                <ShieldCheck className="w-3.5 h-3.5" />
+              <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-1 shadow-md border-2 border-white" title="Verificado">
+                <CheckCircle2 className="w-3.5 h-3.5" />
               </span>
             </div>
 
-            {/* Información */}
+            {/* Información de la Tienda */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                 <h1 className="text-2xl font-black tracking-tight text-slate-950">PediClick Store</h1>
                 <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Catálogo Oficial
+                  <Sparkles className="w-3 h-3" /> Tienda Oficial
                 </span>
-                <button
-                  onClick={() => setIsConfigOpen(true)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
-                  title="Configurar WhatsApp"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsConfigOpen(true)}
+                    className="p-1.5 text-slate-500 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
+                    title="Configuración de Tienda"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Catálogo digital directo por WhatsApp.
+                Catálogo digital en vivo. Haz tu pedido y recibe atención directa por WhatsApp.
               </p>
 
+              {/* Insignias de Confianza */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-4 text-xs font-semibold">
                 <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 px-3 py-1 rounded-xl border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Disponible para Pedidos
+                  Atendiendo Pedidos
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
-                  <Truck className="w-3.5 h-3.5 text-slate-400" /> Envíos Activos
+                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Respuestas Rápidas
+                </span>
+                <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
+                  <Truck className="w-3.5 h-3.5 text-slate-400" /> Envíos Seguros
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Buscador y Controles */}
+        {/* Buscador & Acciones */}
         <div className="mt-6 space-y-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar por producto..."
+                placeholder="Buscar por nombre o descripción..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full bg-white pl-11 pr-4 py-3.5 rounded-2xl border border-slate-200/80 shadow-sm text-sm placeholder:text-slate-400 outline-none focus:border-slate-950 transition-all"
               />
             </div>
-            <button
-              onClick={() => setIsAddProductOpen(true)}
-              className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0"
-            >
-              <PackagePlus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nuevo Producto</span>
-            </button>
+
+            {/* Botón visible únicamente si está en Modo Admin */}
+            {isAdmin && (
+              <button
+                onClick={() => setIsAddProductOpen(true)}
+                className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0 animate-in fade-in"
+              >
+                <PackagePlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Nuevo Producto</span>
+              </button>
+            )}
           </div>
 
           {/* Categorías */}
@@ -266,7 +321,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Listado de Productos */}
+        {/* Catálogo de Productos */}
         <div className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-black text-slate-950 text-lg tracking-tight">Catálogo de Productos</h2>
@@ -278,16 +333,20 @@ export default function Home() {
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-400">
                 <Info className="w-6 h-6" />
               </div>
-              <h3 className="text-slate-950 font-black text-base">No hay productos aún</h3>
+              <h3 className="text-slate-950 font-black text-base">Catálogo en Actualización</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
-                Haz clic en el botón para agregar productos reales al catálogo.
+                {isAdmin
+                  ? "Aún no has agregado productos. Presiona el botón para incluir los primeros artículos."
+                  : "No hay productos disponibles en esta sección por el momento."}
               </p>
-              <button
-                onClick={() => setIsAddProductOpen(true)}
-                className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
-              >
-                <PackagePlus className="w-4 h-4" /> Agregar Producto
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsAddProductOpen(true)}
+                  className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
+                >
+                  <PackagePlus className="w-4 h-4" /> Agregar Producto
+                </button>
+              )}
             </div>
           ) : (
             filteredProducts.map((p) => {
@@ -298,41 +357,71 @@ export default function Home() {
                   key={p.id}
                   className="group bg-white p-4 rounded-3xl border border-slate-200/70 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col sm:flex-row gap-4 items-start sm:items-center relative overflow-hidden"
                 >
+                  {/* Imagen y Badges */}
                   <div className="relative w-full sm:w-28 h-40 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
                     <img
                       src={p.image}
                       alt={p.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
+
+                    {p.badge && p.badge !== "NINGUNO" && (
+                      <span
+                        className={`absolute top-2 left-2 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wider text-white uppercase shadow-md flex items-center gap-1 ${
+                          p.badge === "OFERTA"
+                            ? "bg-red-500"
+                            : p.badge === "MÁS VENDIDO"
+                            ? "bg-amber-500"
+                            : "bg-indigo-600"
+                        }`}
+                      >
+                        {p.badge === "OFERTA" && <Tag className="w-2.5 h-2.5" />}
+                        {p.badge === "MÁS VENDIDO" && <Flame className="w-2.5 h-2.5" />}
+                        {p.badge}
+                      </span>
+                    )}
                   </div>
 
+                  {/* Detalles */}
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-bold text-slate-950 text-base leading-snug">{p.name}</h3>
-                      <button
-                        onClick={() => handleDeleteProduct(p.id)}
-                        className="text-slate-300 hover:text-red-500 p-1 transition-colors"
-                        title="Eliminar producto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="text-slate-300 hover:text-red-500 p-1 transition-colors"
+                          title="Eliminar del catálogo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed line-clamp-2">
                       {p.description}
                     </p>
-                    <p className="font-black text-slate-950 text-base mt-3 flex items-baseline gap-1">
-                      ${p.price.toFixed(2)}
-                      <span className="text-[10px] text-slate-400 font-normal">USD</span>
-                    </p>
+
+                    <div className="flex items-baseline gap-2 mt-3">
+                      <span className="font-black text-slate-950 text-base flex items-baseline gap-0.5">
+                        ${p.price.toFixed(2)}
+                        <span className="text-[10px] text-slate-400 font-normal">USD</span>
+                      </span>
+
+                      {p.originalPrice && p.originalPrice > p.price && (
+                        <span className="text-xs text-slate-400 line-through font-semibold">
+                          ${p.originalPrice.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
+                  {/* Controles de Carrito */}
                   <div className="w-full sm:w-auto flex justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     {qty === 0 ? (
                       <button
                         onClick={() => updateQuantity(p.id, 1)}
                         className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
                       >
-                        <Plus className="w-4 h-4" /> Añadir
+                        <Plus className="w-4 h-4" /> Añadir al Carrito
                       </button>
                     ) : (
                       <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
@@ -358,10 +447,84 @@ export default function Home() {
           )}
         </div>
 
-        <footer className="mt-16 text-center border-t border-slate-200/70 pt-8 pb-4 text-slate-400 text-xs">
+        {/* Pie de página con acceso discreto a Administración */}
+        <footer className="mt-16 text-center border-t border-slate-200/70 pt-8 pb-4 text-slate-400 text-xs flex flex-col items-center gap-2">
           <p className="font-semibold text-slate-500">PediClick Store &copy; 2026</p>
+
+          <button
+            onClick={() => {
+              if (isAdmin) setIsAdmin(false);
+              else setIsAdminModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-700 transition-colors mt-1"
+          >
+            {isAdmin ? (
+              <>
+                <Unlock className="w-3 h-3 text-emerald-600" />
+                <span className="text-emerald-700 font-bold">Modo Admin Activo (Cerrar)</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-3 h-3" />
+                <span>Acceso Dueño</span>
+              </>
+            )}
+          </button>
         </footer>
       </div>
+
+      {/* Modal Autenticación por PIN */}
+      {isAdminModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleAdminLogin}
+            className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl space-y-4 text-center relative"
+          >
+            <button
+              type="button"
+              onClick={() => setIsAdminModalOpen(false)}
+              className="absolute top-4 right-4 bg-slate-100 p-1.5 rounded-full text-slate-500"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-950">
+              <KeyRound className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="font-black text-slate-950 text-base">Modo Administrador</h3>
+              <p className="text-xs text-slate-500 mt-1">Ingresa tu clave PIN para gestionar el catálogo</p>
+            </div>
+
+            <div>
+              <input
+                type="password"
+                maxLength={8}
+                required
+                autoFocus
+                placeholder="PIN (por defecto: 1234)"
+                value={inputPin}
+                onChange={(e) => {
+                  setInputPin(e.target.value);
+                  setPinError(false);
+                }}
+                className={`w-full text-center tracking-widest bg-slate-50 px-3.5 py-3 rounded-xl border text-sm font-bold ${
+                  pinError ? "border-red-500 bg-red-50/50" : "border-slate-200"
+                }`}
+              />
+              {pinError && <p className="text-[10px] text-red-500 font-bold mt-1">PIN incorrecto</p>}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs shadow-md"
+            >
+              Ingresar al Panel
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Modal Agregar Producto */}
       {isAddProductOpen && (
@@ -371,7 +534,7 @@ export default function Home() {
             className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Agregar Producto</h3>
+              <h3 className="font-black text-slate-950 text-lg">Agregar Nuevo Producto</h3>
               <button
                 type="button"
                 onClick={() => setIsAddProductOpen(false)}
@@ -383,11 +546,11 @@ export default function Home() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre *</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del Producto *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Tenis Blancos"
+                  placeholder="Ej. Zapatillas Nike Air"
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
@@ -401,12 +564,26 @@ export default function Home() {
                     type="number"
                     step="0.01"
                     required
-                    placeholder="35.00"
+                    placeholder="49.99"
                     value={newProdPrice}
                     onChange={(e) => setNewProdPrice(e.target.value)}
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio Anterior (Opcional)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="65.00"
+                    value={newProdOrigPrice}
+                    onChange={(e) => setNewProdOrigPrice(e.target.value)}
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Categoría</label>
                   <select
@@ -419,10 +596,23 @@ export default function Home() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Insignia Especial</label>
+                  <select
+                    value={newProdBadge}
+                    onChange={(e) => setNewProdBadge(e.target.value as any)}
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                  >
+                    <option value="NINGUNO">Ninguna</option>
+                    <option value="OFERTA">OFERTA</option>
+                    <option value="MÁS VENDIDO">MÁS VENDIDO</option>
+                    <option value="NUEVO">NUEVO</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">URL de Foto (Opcional)</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">URL de Imagen (Opcional)</label>
                 <input
                   type="url"
                   placeholder="https://..."
@@ -433,10 +623,10 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Descripción</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Descripción corta</label>
                 <textarea
                   rows={2}
-                  placeholder="Detalles del producto..."
+                  placeholder="Escribe brevemente sobre el producto..."
                   value={newProdDesc}
                   onChange={(e) => setNewProdDesc(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs resize-none"
@@ -448,21 +638,21 @@ export default function Home() {
               type="submit"
               className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg"
             >
-              Guardar en el Catálogo
+              Publicar en el Catálogo
             </button>
           </form>
         </div>
       )}
 
-      {/* Modal Configuración WhatsApp */}
+      {/* Modal Ajustes del Negocio */}
       {isConfigOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
-            onSubmit={handleSavePhone}
+            onSubmit={handleSaveConfig}
             className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-base">Ajustes de Tienda</h3>
+              <h3 className="font-black text-slate-950 text-base">Ajustes del Negocio</h3>
               <button
                 type="button"
                 onClick={() => setIsConfigOpen(false)}
@@ -472,30 +662,42 @@ export default function Home() {
               </button>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Número de WhatsApp (con código de país):</label>
-              <input
-                type="text"
-                required
-                placeholder="Ej. 8091234567"
-                value={whatsappNumber}
-                onChange={(e) => setWhatsappNumber(e.target.value)}
-                className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">Aquí se enviarán los pedidos de los clientes.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">WhatsApp de Recepción de Pedidos:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="8091234567"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Cambiar Clave PIN (Opcional):</label>
+                <input
+                  type="password"
+                  placeholder="Nuevo PIN de acceso"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value)}
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
+                />
+              </div>
             </div>
 
             <button
               type="submit"
               className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs"
             >
-              Guardar Número
+              Guardar Cambios
             </button>
           </form>
         </div>
       )}
 
-      {/* Modal Checkout */}
+      {/* Modal Checkout / Finalizar Pedido */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
@@ -503,7 +705,7 @@ export default function Home() {
             className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Datos de Envío</h3>
+              <h3 className="font-black text-slate-950 text-lg">Confirmar Pedido</h3>
               <button
                 type="button"
                 onClick={() => setIsCheckoutOpen(false)}
@@ -521,7 +723,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Maria García"
+                  placeholder="Ej. Juan Pérez"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
@@ -535,7 +737,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Calle Sol #4"
+                  placeholder="Ej. Calle Principal #12"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
@@ -544,22 +746,22 @@ export default function Home() {
 
               <div>
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                  <CreditCard className="w-3.5 h-3.5 text-slate-400" /> Método de Pago:
+                  <CreditCard className="w-3.5 h-3.5 text-slate-400" /> Forma de Pago:
                 </label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                 >
-                  <option value="Transferencia / Depósito">Transferencia / Depósito</option>
-                  <option value="Pago contra Entrega">Pago contra Entrega</option>
+                  <option value="Transferencia / Depósito">Transferencia / Depósito Bancario</option>
+                  <option value="Pago contra Entrega (Efectivo)">Pago contra Entrega (Efectivo)</option>
                 </select>
               </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Final</span>
                 <span className="text-lg font-black text-slate-950">${totalPrice.toFixed(2)} USD</span>
               </div>
               <button
@@ -573,7 +775,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Botón Flotante */}
+      {/* Barra Flotante de Compra */}
       {totalItems > 0 && (
         <div className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto z-40">
           <button
@@ -585,9 +787,9 @@ export default function Home() {
                 {totalItems}
               </div>
               <div className="text-left">
-                <p className="text-xs text-emerald-100 font-medium leading-none">Confirmar pedido</p>
+                <p className="text-xs text-emerald-100 font-medium leading-none">Tu Carrito</p>
                 <p className="font-extrabold text-white text-sm mt-1 flex items-center gap-1">
-                  Continuar orden <ArrowRight className="w-4 h-4 ml-0.5" />
+                  Finalizar Pedido <ArrowRight className="w-4 h-4 ml-0.5" />
                 </p>
               </div>
             </div>
