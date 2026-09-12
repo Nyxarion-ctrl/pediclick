@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Store, Package, Check } from "lucide-react";
+import { Plus, Trash2, Store, Package, Check, Lock, ShieldCheck } from "lucide-react";
 
 interface Product {
   id: string;
@@ -10,20 +10,40 @@ interface Product {
   description: string;
   price: number;
   image_url: string;
+  badge?: string;
 }
 
 export default function AdminPage() {
+  // Autenticación por PIN
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+
+  // Datos de la Tienda
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
   const [storeSlug, setStoreSlug] = useState("");
   const [storeId, setStoreId] = useState<string | null>(null);
 
+  // Datos de Productos
   const [products, setProducts] = useState<Product[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [badge, setBadge] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Validar PIN de Administrador
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Cambia "1234" por tu PIN deseado
+    if (pinInput === "1234") {
+      setIsAuthenticated(true);
+    } else {
+      alert("PIN incorrecto. Inténtalo de nuevo.");
+      setPinInput("");
+    }
+  };
 
   // Crear o guardar negocio
   const handleSaveStore = async (e: React.FormEvent) => {
@@ -64,7 +84,7 @@ export default function AdminPage() {
     fetchProducts();
   }, [storeId]);
 
-  // Agregar nuevo producto
+  // Agregar nuevo producto (incluye campo de insignia/badge)
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeId || !name || !price) return;
@@ -76,18 +96,20 @@ export default function AdminPage() {
         name,
         description,
         price: parseFloat(price),
+        badge: badge || null,
         image_url: imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60",
       },
     ]);
 
     setLoading(false);
     if (error) {
-      alert("Error al agregar producto");
+      alert("Error al agregar producto. Asegúrate de tener la columna 'badge' en tu tabla de Supabase.");
       console.error(error);
     } else {
       setName("");
       setDescription("");
       setPrice("");
+      setBadge("");
       setImageUrl("");
       fetchProducts();
     }
@@ -99,6 +121,39 @@ export default function AdminPage() {
     if (!error) fetchProducts();
   };
 
+  // 1. PANTALLA DE ACCESO POR PIN
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <form onSubmit={handleLogin} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-sm w-full space-y-4 text-center">
+          <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+            <Lock className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="font-bold text-slate-900 text-lg">Acceso Administrador</h2>
+            <p className="text-xs text-slate-500">Ingresa tu PIN para gestionar el menú</p>
+          </div>
+          <input
+            type="password"
+            placeholder="Ingresa tu PIN"
+            value={pinInput}
+            onChange={(e) => setPinInput(e.target.value)}
+            className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 text-center outline-none focus:border-emerald-500"
+            required
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 font-bold text-sm transition-colors flex items-center justify-center gap-2"
+          >
+            <ShieldCheck className="w-4 h-4" /> Ingresar
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // 2. PANEL DE ADMINISTRACIÓN
   return (
     <div className="min-h-screen bg-slate-50 p-4 max-w-lg mx-auto text-slate-800 space-y-6">
       <header className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
@@ -197,6 +252,23 @@ export default function AdminPage() {
               className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
               required
             />
+
+            {/* Selector de Insignia/Etiqueta */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Insignia (Opcional)</label>
+              <select
+                value={badge}
+                onChange={(e) => setBadge(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-500 bg-white"
+              >
+                <option value="">Sin insignia</option>
+                <option value="DESTACADO">DESTACADO</option>
+                <option value="POPULAR">POPULAR</option>
+                <option value="OFERTA">OFERTA</option>
+                <option value="NUEVO">NUEVO</option>
+              </select>
+            </div>
+
             <input
               type="url"
               placeholder="URL Imagen (Opcional)"
@@ -220,7 +292,14 @@ export default function AdminPage() {
               <div key={p.id} className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 shadow-sm">
                 <img src={p.image_url} alt={p.name} className="w-12 h-12 rounded-lg object-cover bg-slate-100" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-900 text-sm truncate">{p.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-slate-900 text-sm truncate">{p.name}</p>
+                    {p.badge && (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                        {p.badge}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500">${p.price.toFixed(2)}</p>
                 </div>
                 <button
