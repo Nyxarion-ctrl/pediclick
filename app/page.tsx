@@ -123,37 +123,31 @@ export default function Home() {
     }
   };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+ const handleAddProduct = (e: React.FormEvent) => {
   e.preventDefault();
-  if (!newProdName || !newProdPrice) return;
+  if (!newProdName) return;
 
-  setLoading(true);
-  
-  // Inserción directa pública a la base de datos
-  const { error } = await supabase.from("pediclick_products").insert([
-    {
-      store_id: storeId, // o el id de la tienda actual
-      name: newProdName,
-      description: newProdDesc,
-      price: parseFloat(newProdPrice),
-      image_url: newProdImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60",
-    },
-  ]);
+  const createdProduct: ProductLink = {
+    id: Date.now().toString(),
+    name: newProdName,
+    price: newProdPrice ? parseFloat(newProdPrice) : undefined,
+    originalPrice: newProdOrigPrice ? parseFloat(newProdOrigPrice) : undefined,
+    category: newProdCat,
+    badge: newProdBadge,
+    description: newProdDesc || "Sin descripción corta.",
+    image: newProdImg || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+    targetUrl: newProdUrl || "#",
+  };
 
-  setLoading(false);
-
-  if (error) {
-    alert("Error al publicar el producto");
-    console.error(error);
-  } else {
-    // Limpiar campos y cerrar modal
-    setNewProdName("");
-    setNewProdDesc("");
-    setNewProdPrice("");
-    setNewProdImage("");
-    setIsAddProductOpen(false);
-    fetchProducts(); // Recargar productos
-  }
+  saveProductsToStorage([createdProduct, ...products]);
+  setNewProdName("");
+  setNewProdPrice("");
+  setNewProdOrigPrice("");
+  setNewProdDesc("");
+  setNewProdImg("");
+  setNewProdUrl("");
+  setNewProdBadge("NINGUNO");
+  setIsAddProductOpen(false);
 };
 
   const handleDeleteProduct = (id: string) => {
