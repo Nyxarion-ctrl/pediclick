@@ -461,7 +461,7 @@ export default function Home() {
                 maxLength={8}
                 required
                 autoFocus
-                placeholder="PIN (por defecto: 1234)"
+               placeholder="Ingresa tu PIN"
                 value={inputPin}
                 onChange={(e) => {
                   setInputPin(e.target.value);
