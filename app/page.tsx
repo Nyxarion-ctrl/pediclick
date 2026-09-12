@@ -14,12 +14,17 @@ import {
   Tag,
   PackagePlus,
   Trash2,
+  Pencil,
   Settings,
   X,
   KeyRound,
   Link2,
   AlertTriangle,
+  BadgeCheck,
+  CreditCard,
 } from "lucide-react";
+
+export type ProductStatus = "pending" | "approved";
 
 export interface ProductLink {
   id: string;
@@ -29,9 +34,12 @@ export interface ProductLink {
   originalPrice?: number;
   category: string;
   image: string;
-  targetUrl: string; // El link externo del producto o negocio que pagó
+  whatsapp: string; // número que ingresó el vendedor, ej. "8095551234"
+  targetUrl: string; // se genera automáticamente como https://wa.me/<whatsapp>
   badge?: "DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO";
-  expiresAt?: string; // ISO date — cuándo vence el pago mensual del vendedor
+  expiresAt?: string; // ISO date — próxima fecha de renovación del vendedor
+  status: ProductStatus; // "pending" = esperando que apruebes el pago; "approved" = visible al público
+  submittedAt: string;
 }
 
 const DEFAULT_PRODUCTS: ProductLink[] = [
@@ -44,9 +52,11 @@ const DEFAULT_PRODUCTS: ProductLink[] = [
     category: "Tecnología",
     image:
       "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
-    targetUrl: "https://whatsapp.com",
+    whatsapp: "18095550101",
+    targetUrl: "https://wa.me/18095550101",
     badge: "DESTACADO",
-    expiresAt: undefined,
+    status: "approved",
+    submittedAt: new Date().toISOString(),
   },
   {
     id: "demo-2",
@@ -56,9 +66,11 @@ const DEFAULT_PRODUCTS: ProductLink[] = [
     category: "Tecnología",
     image:
       "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
-    targetUrl: "https://whatsapp.com",
+    whatsapp: "18095550102",
+    targetUrl: "https://wa.me/18095550102",
     badge: "POPULAR",
-    expiresAt: undefined,
+    status: "approved",
+    submittedAt: new Date().toISOString(),
   },
 ];
 
@@ -72,17 +84,27 @@ const BADGE_PRIORITY: Record<string, number> = {
   NINGUNO: 3,
 };
 
+// TODO: reemplaza estos dos links por tus checkouts reales de suscripción mensual
+// (un "Payment Link" de Lemon Squeezy y un "Subscribe" link de un plan de PayPal).
+const LEMON_CHECKOUT_URL = "https://tu-tienda.lemonsqueezy.com/checkout/buy/REEMPLAZA-ESTE-ID";
+const PAYPAL_CHECKOUT_URL =
+  "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=REEMPLAZA-ESTE-ID";
+
 /**
  * ADAPTADOR DE ALMACENAMIENTO
  * ---------------------------
  * Toda lectura/escritura de datos pasa por aquí. Hoy usa localStorage, lo cual
  * significa que cada visitante ve solo SU PROPIA copia del catálogo — el admin
- * publica en su navegador y nadie más lo ve.
+ * publica en su navegador y nadie más lo ve, y las solicitudes públicas tampoco
+ * llegan realmente al admin desde otro dispositivo.
  *
- * Para pasar a un backend real (recomendado: Supabase o Vercel KV/Postgres),
- * solo hay que reescribir las funciones de este objeto para que hagan fetch()
- * a tu API en vez de leer/escribir localStorage. El resto del componente no
- * necesita cambiar.
+ * Para pasar a un backend real (recomendado: Supabase), reescribe estas
+ * funciones para que hagan fetch() a tu API en vez de leer/escribir
+ * localStorage. El resto del componente no necesita cambiar.
+ *
+ * Este es también el lugar donde, más adelante, un webhook de Lemon
+ * Squeezy/PayPal marcaría automáticamente un producto como "approved" en
+ * cuanto se confirme el pago — hoy esa aprobación la haces tú a mano.
  */
 const storage = {
   async getProducts(): Promise<ProductLink[]> {
@@ -107,23 +129,15 @@ const storage = {
   },
   // NOTA DE SEGURIDAD: esta validación ocurre en el navegador del cliente.
   // Cualquiera con DevTools puede forzar isAdmin=true sin el PIN correcto.
-  // Antes de manejar pagos reales de vendedores, esto debe validarse en un
-  // endpoint de servidor (API route) que devuelva un token de sesión.
+  // Antes de manejar pagos reales, esto debe validarse en un endpoint de
+  // servidor que devuelva un token de sesión.
   async setPin(pin: string): Promise<void> {
     localStorage.setItem("pediclick_pin", pin);
   },
 };
 
-// Convierte números sueltos (con o sin +, espacios, guiones) en un link wa.me
-function normalizeTargetUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "#";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  const digitsOnly = trimmed.replace(/[^0-9]/g, "");
-  if (digitsOnly.length >= 8 && digitsOnly === trimmed.replace(/[+\s-]/g, "")) {
-    return `https://wa.me/${digitsOnly}`;
-  }
-  return trimmed;
+function digitsOnly(raw: string): string {
+  return raw.replace(/[^0-9]/g, "");
 }
 
 function isExpired(product: ProductLink): boolean {
@@ -143,6 +157,9 @@ function sortProducts(products: ProductLink[]): ProductLink[] {
   });
 }
 
+type FormMode = "closed" | "public" | "admin";
+type FormStep = "form" | "payment";
+
 export default function Home() {
   const [products, setProducts] = useState<ProductLink[]>([]);
   const [adminPin, setAdminPin] = useState("1491");
@@ -152,39 +169,35 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [search, setSearch] = useState("");
 
-  // Modales
-  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>("closed");
+  const [formStep, setFormStep] = useState<FormStep>("form");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
-  // Campos Formulario Admin / PIN
   const [inputPin, setInputPin] = useState("");
   const [pinError, setPinError] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [newPinConfirm, setNewPinConfirm] = useState("");
   const [pinConfigError, setPinConfigError] = useState("");
 
-  // Formulario Nuevo Producto / Enlace
-  const [newProdName, setNewProdName] = useState("");
-  const [newProdPrice, setNewProdPrice] = useState("");
-  const [newProdOrigPrice, setNewProdOrigPrice] = useState("");
-  const [newProdCat, setNewProdCat] = useState("General");
-  const [newProdBadge, setNewProdBadge] = useState<"DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO">(
-    "NINGUNO"
-  );
-  const [newProdDesc, setNewProdDesc] = useState("");
-  const [newProdImg, setNewProdImg] = useState("");
-  const [newProdUrl, setNewProdUrl] = useState("");
-  const [newProdExpires, setNewProdExpires] = useState("");
+  const [prodName, setProdName] = useState("");
+  const [prodWhatsapp, setProdWhatsapp] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodOrigPrice, setProdOrigPrice] = useState("");
+  const [prodCat, setProdCat] = useState("General");
+  const [prodBadge, setProdBadge] = useState<"DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO">("NINGUNO");
+  const [prodDesc, setProdDesc] = useState("");
+  const [prodImg, setProdImg] = useState("");
+  const [prodExpires, setProdExpires] = useState("");
 
-  // Toast simple
   const [toast, setToast] = useState<string | null>(null);
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2500);
   }, []);
 
-  // Cargar datos iniciales
   useEffect(() => {
     (async () => {
       const [savedProducts, savedPin] = await Promise.all([storage.getProducts(), storage.getPin()]);
@@ -194,21 +207,60 @@ export default function Home() {
     })();
   }, []);
 
-  // Cerrar cualquier modal abierto con Escape
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      setIsAddProductOpen(false);
+      closeForm();
       setIsConfigOpen(false);
       setIsAdminModalOpen(false);
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveProductsToStorage = async (updated: ProductLink[]) => {
     setProducts(updated);
     await storage.saveProducts(updated);
+  };
+
+  const resetForm = () => {
+    setProdName("");
+    setProdWhatsapp("");
+    setProdPrice("");
+    setProdOrigPrice("");
+    setProdCat("General");
+    setProdBadge("NINGUNO");
+    setProdDesc("");
+    setProdImg("");
+    setProdExpires("");
+    setEditingId(null);
+    setFormStep("form");
+  };
+
+  const closeForm = () => {
+    setFormMode("closed");
+    resetForm();
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setFormMode(isAdmin ? "admin" : "public");
+  };
+
+  const openEditForm = (product: ProductLink) => {
+    setEditingId(product.id);
+    setProdName(product.name);
+    setProdWhatsapp(product.whatsapp);
+    setProdPrice(product.price?.toString() ?? "");
+    setProdOrigPrice(product.originalPrice?.toString() ?? "");
+    setProdCat(product.category);
+    setProdBadge(product.badge ?? "NINGUNO");
+    setProdDesc(product.description);
+    setProdImg(product.image);
+    setProdExpires(product.expiresAt ?? "");
+    setFormMode("admin");
+    setFormStep("form");
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -224,34 +276,78 @@ export default function Home() {
     }
   };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProdName) return;
+    const whatsappDigits = digitsOnly(prodWhatsapp);
+    if (!prodName || whatsappDigits.length < 8) return;
 
-    const createdProduct: ProductLink = {
+    const targetUrl = `https://wa.me/${whatsappDigits}`;
+
+    if (editingId) {
+      const existing = products.find((p) => p.id === editingId);
+      const nextStatus: ProductStatus =
+        existing?.status === "pending" && isAdmin ? "approved" : existing?.status ?? "approved";
+
+      const updated = products.map((p) =>
+        p.id === editingId
+          ? {
+              ...p,
+              name: prodName,
+              whatsapp: whatsappDigits,
+              targetUrl,
+              price: prodPrice ? parseFloat(prodPrice) : undefined,
+              originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
+              category: prodCat,
+              badge: prodBadge,
+              description: prodDesc || "Sin descripción corta.",
+              image: prodImg || FALLBACK_IMAGE,
+              expiresAt: prodExpires || undefined,
+              status: nextStatus,
+            }
+          : p
+      );
+      await saveProductsToStorage(updated);
+      showToast(
+        nextStatus === "approved" && existing?.status === "pending"
+          ? "Solicitud aprobada y publicada ✅"
+          : "Cambios guardados"
+      );
+      closeForm();
+      return;
+    }
+
+    const created: ProductLink = {
       id: Date.now().toString(),
-      name: newProdName,
-      price: newProdPrice ? parseFloat(newProdPrice) : undefined,
-      originalPrice: newProdOrigPrice ? parseFloat(newProdOrigPrice) : undefined,
-      category: newProdCat,
-      badge: newProdBadge,
-      description: newProdDesc || "Sin descripción corta.",
-      image: newProdImg || FALLBACK_IMAGE,
-      targetUrl: normalizeTargetUrl(newProdUrl),
-      expiresAt: newProdExpires || undefined,
+      name: prodName,
+      whatsapp: whatsappDigits,
+      targetUrl,
+      price: prodPrice ? parseFloat(prodPrice) : undefined,
+      originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
+      category: prodCat,
+      badge: formMode === "admin" ? prodBadge : "NINGUNO",
+      description: prodDesc || "Sin descripción corta.",
+      image: prodImg || FALLBACK_IMAGE,
+      expiresAt: formMode === "admin" ? prodExpires || undefined : undefined,
+      status: formMode === "admin" ? "approved" : "pending",
+      submittedAt: new Date().toISOString(),
     };
 
-    await saveProductsToStorage([createdProduct, ...products]);
-    setNewProdName("");
-    setNewProdPrice("");
-    setNewProdOrigPrice("");
-    setNewProdDesc("");
-    setNewProdImg("");
-    setNewProdUrl("");
-    setNewProdBadge("NINGUNO");
-    setNewProdExpires("");
-    setIsAddProductOpen(false);
-    showToast("Producto publicado en el directorio ✅");
+    await saveProductsToStorage([created, ...products]);
+
+    if (formMode === "public") {
+      setFormStep("payment");
+    } else {
+      showToast("Producto publicado ✅");
+      closeForm();
+    }
+  };
+
+  const handleRejectPending = async (id: string) => {
+    if (confirm("¿Rechazar y eliminar esta solicitud?")) {
+      const updated = products.filter((p) => p.id !== id);
+      await saveProductsToStorage(updated);
+      showToast("Solicitud rechazada");
+    }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -281,15 +377,19 @@ export default function Home() {
     showToast("PIN actualizado correctamente");
   };
 
+  const pendingProducts = products
+    .filter((p) => p.status === "pending")
+    .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+
   const filteredProducts = sortProducts(
     products.filter((p) => {
+      if (p.status !== "approved") return false;
       const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
       const q = search.toLowerCase();
       const matchesSearch =
         p.name.toLowerCase().includes(q) ||
         p.description.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q);
-      // Los clientes finales no ven productos vencidos; el admin sí (para renovar/eliminar)
       const visibleForRole = isAdmin || !isExpired(p);
       return matchesCategory && matchesSearch && visibleForRole;
     })
@@ -303,25 +403,24 @@ export default function Home() {
     );
   }
 
+  const editingExisting = editingId ? products.find((p) => p.id === editingId) : undefined;
+  const isReviewingPending = isAdmin && editingExisting?.status === "pending";
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-20">
-      {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-slate-950 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg">
           {toast}
         </div>
       )}
 
-      {/* Portada Superior */}
       <div className="relative h-60 sm:h-72 w-full bg-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-[#F8FAFC] via-slate-950/80 to-slate-950" />
       </div>
 
-      {/* Tarjeta Principal */}
       <div className="max-w-2xl mx-auto px-4 -mt-36 relative z-20">
         <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            {/* Logo */}
             <div className="relative group shrink-0">
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 p-[2px] shadow-xl shadow-slate-950/10">
                 <div className="w-full h-full bg-slate-950 rounded-[14px] flex flex-col items-center justify-center relative overflow-hidden">
@@ -339,7 +438,6 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Información de la Plataforma */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                 <h1 className="text-2xl font-black tracking-tight text-slate-950">PediClick Directory</h1>
@@ -357,17 +455,16 @@ export default function Home() {
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Directorio digital de ofertas y productos destacados. Haz clic para ir al enlace oficial del vendedor.
+                Directorio digital de ofertas y productos destacados. Haz clic para contactar al vendedor por WhatsApp.
               </p>
 
-              {/* Insignias de la plataforma */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-4 text-xs font-semibold">
                 <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 px-3 py-1 rounded-xl border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Catálogo en Vivo
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
-                  <Link2 className="w-3.5 h-3.5 text-slate-400" /> Links Directos
+                  <Link2 className="w-3.5 h-3.5 text-slate-400" /> Contacto Directo
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
                   <Clock className="w-3.5 h-3.5 text-slate-400" /> Ofertas Activas
@@ -377,7 +474,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Buscador & Acciones */}
         <div className="mt-6 space-y-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -391,18 +487,15 @@ export default function Home() {
               />
             </div>
 
-            {isAdmin && (
-              <button
-                onClick={() => setIsAddProductOpen(true)}
-                className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0"
-              >
-                <PackagePlus className="w-4 h-4" />
-                <span className="hidden sm:inline">Publicar Enlace</span>
-              </button>
-            )}
+            <button
+              onClick={openCreateForm}
+              className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0"
+            >
+              <PackagePlus className="w-4 h-4" />
+              <span className="hidden sm:inline">{isAdmin ? "Publicar Enlace" : "Publicar mi Producto"}</span>
+            </button>
           </div>
 
-          {/* Categorías */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {CATEGORIES.map((cat) => {
               const active = selectedCategory === cat;
@@ -423,7 +516,49 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Lista de Productos / Enlaces */}
+        {isAdmin && pendingProducts.length > 0 && (
+          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-3xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <h2 className="font-black text-amber-800 text-sm">
+                Pendientes de aprobación ({pendingProducts.length})
+              </h2>
+            </div>
+            <div className="space-y-2">
+              {pendingProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="bg-white rounded-2xl p-3 flex items-center justify-between gap-3 border border-amber-100"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-950 text-sm truncate">{p.name}</p>
+                    <p className="text-[11px] text-slate-500">
+                      WhatsApp: {p.whatsapp} · {p.category}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => openEditForm(p)}
+                      className="bg-slate-950 hover:bg-indigo-600 text-white text-[11px] font-bold px-3 py-2 rounded-xl transition-colors"
+                    >
+                      Revisar
+                    </button>
+                    <button
+                      onClick={() => handleRejectPending(p.id)}
+                      className="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 text-[11px] font-bold px-3 py-2 rounded-xl transition-colors"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-amber-700 mt-3">
+              Verifica el pago en tu panel de Lemon Squeezy o PayPal antes de aprobar.
+            </p>
+          </div>
+        )}
+
         <div className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-black text-slate-950 text-lg tracking-tight">Productos Promocionados</h2>
@@ -438,17 +573,10 @@ export default function Home() {
               <h3 className="text-slate-950 font-black text-base">Directorio en Actualización</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
                 {isAdmin
-                  ? "Aún no has agregado productos. Presiona el botón para incluir el primer producto con su enlace."
+                  ? "Aún no hay productos publicados. Puedes agregar uno directamente o esperar solicitudes."
                   : "No hay productos disponibles en esta sección por el momento."}
               </p>
-              {isAdmin ? (
-                <button
-                  onClick={() => setIsAddProductOpen(true)}
-                  className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
-                >
-                  <PackagePlus className="w-4 h-4" /> Publicar Producto
-                </button>
-              ) : (
+              {!isAdmin && (
                 <button
                   onClick={() => setIsAdminModalOpen(true)}
                   className="mt-5 inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs transition-all"
@@ -467,7 +595,6 @@ export default function Home() {
                     expired ? "border-amber-300 opacity-70" : "border-slate-200/70"
                   }`}
                 >
-                  {/* Imagen y Badges */}
                   <div className="relative w-full sm:w-28 h-40 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
                     <img
                       src={p.image}
@@ -477,7 +604,6 @@ export default function Home() {
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-
                     {p.badge && p.badge !== "NINGUNO" && (
                       <span
                         className={`absolute top-2 left-2 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wider text-white uppercase shadow-md flex items-center gap-1 ${
@@ -495,18 +621,26 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* Detalles del Producto */}
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-bold text-slate-950 text-base leading-snug">{p.name}</h3>
                       {isAdmin && (
-                        <button
-                          onClick={() => handleDeleteProduct(p.id)}
-                          className="text-slate-300 hover:text-red-500 p-1 transition-colors"
-                          title="Eliminar del catálogo"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => openEditForm(p)}
+                            className="text-slate-300 hover:text-indigo-600 p-1 transition-colors"
+                            title="Editar producto"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p.id)}
+                            className="text-slate-300 hover:text-red-500 p-1 transition-colors"
+                            title="Eliminar del catálogo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed line-clamp-2">
@@ -519,7 +653,6 @@ export default function Home() {
                           ${p.price.toFixed(2)}
                           <span className="text-[10px] text-slate-400 font-normal">USD</span>
                         </span>
-
                         {p.originalPrice && p.originalPrice > p.price && (
                           <span className="text-xs text-slate-400 line-through font-semibold">
                             ${p.originalPrice.toFixed(2)}
@@ -530,12 +663,11 @@ export default function Home() {
 
                     {isAdmin && expired && (
                       <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                        <AlertTriangle className="w-3 h-3" /> Pago vencido — renovar con el vendedor
+                        <AlertTriangle className="w-3 h-3" /> Suscripción vencida — pídele que renueve
                       </span>
                     )}
                   </div>
 
-                  {/* Botón Redirección al Link del Cliente */}
                   <div className="w-full sm:w-auto flex justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <a
                       href={p.targetUrl}
@@ -552,10 +684,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Pie de página */}
         <footer className="mt-16 text-center border-t border-slate-200/70 pt-8 pb-4 text-slate-400 text-xs flex flex-col items-center gap-2">
           <p className="font-semibold text-slate-500">PediClick Directory &copy; 2026</p>
-
           <button
             onClick={() => {
               if (isAdmin) setIsAdmin(false);
@@ -578,7 +708,6 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* Modal Autenticación PIN Admin */}
       {isAdminModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -592,16 +721,13 @@ export default function Home() {
             >
               <X className="w-4 h-4" />
             </button>
-
             <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-950">
               <KeyRound className="w-6 h-6" />
             </div>
-
             <div>
               <h3 className="font-black text-slate-950 text-base">Modo Administrador</h3>
-              <p className="text-xs text-slate-500 mt-1">Ingresa tu PIN para publicar o gestionar enlaces</p>
+              <p className="text-xs text-slate-500 mt-1">Ingresa tu PIN para gestionar el directorio</p>
             </div>
-
             <div>
               <input
                 type="password"
@@ -620,96 +746,135 @@ export default function Home() {
               />
               {pinError && <p className="text-[10px] text-red-500 font-bold mt-1">PIN incorrecto</p>}
             </div>
-
-            <button
-              type="submit"
-              className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs shadow-md"
-            >
+            <button type="submit" className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs shadow-md">
               Ingresar al Panel
             </button>
           </form>
         </div>
       )}
 
-      {/* Modal Agregar Nuevo Producto / Enlace Patrocinado */}
-      {isAddProductOpen && (
+      {formMode !== "closed" && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <form
-            onSubmit={handleAddProduct}
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Publicar Nuevo Producto</h3>
+          {formStep === "payment" ? (
+            <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600">
+                <BadgeCheck className="w-7 h-7" />
+              </div>
+              <h3 className="font-black text-slate-950 text-lg">¡Ya casi! Activa tu producto</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Tu producto quedará visible en el directorio en cuanto confirmemos el pago de tu
+                suscripción mensual. Elige tu método de pago:
+              </p>
+              <div className="space-y-2 pt-2">
+                <a
+                  href={LEMON_CHECKOUT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white font-bold py-3 rounded-xl text-xs transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" /> Pagar con Lemon Squeezy
+                </a>
+                <a
+                  href={PAYPAL_CHECKOUT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-xl text-xs transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" /> Pagar con PayPal
+                </a>
+              </div>
               <button
-                type="button"
-                onClick={() => setIsAddProductOpen(false)}
-                className="bg-slate-100 p-2 rounded-full text-slate-600"
+                onClick={closeForm}
+                className="text-[11px] text-slate-400 hover:text-slate-600 font-semibold pt-1"
               >
-                <X className="w-4 h-4" />
+                Ya pagué / cerrar
               </button>
             </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del Producto / Oferta *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Zapatillas Nike Air"
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                />
+          ) : (
+            <form
+              onSubmit={handleFormSubmit}
+              className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="font-black text-slate-950 text-lg">
+                  {isReviewingPending
+                    ? "Revisar Solicitud"
+                    : editingId
+                    ? "Editar Producto"
+                    : formMode === "admin"
+                    ? "Publicar Nuevo Producto"
+                    : "Publicar mi Producto"}
+                </h3>
+                <button type="button" onClick={closeForm} className="bg-slate-100 p-2 rounded-full text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Link de Destino / WhatsApp del Cliente *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="809-555-1234 o https://tienda.com/producto"
-                  value={newProdUrl}
-                  onChange={(e) => setNewProdUrl(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Si escribes solo un número, se convierte automáticamente en link de WhatsApp.
+              {formMode === "public" && !editingId && (
+                <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  Completa tus datos y en el siguiente paso te mostraremos cómo pagar tu suscripción
+                  mensual. Tu producto se publicará en cuanto lo confirmemos.
                 </p>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio ($) (Opcional)</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del Producto / Oferta *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    placeholder="49.99"
-                    value={newProdPrice}
-                    onChange={(e) => setNewProdPrice(e.target.value)}
+                    type="text"
+                    required
+                    placeholder="Ej. Zapatillas Nike Air"
+                    value={prodName}
+                    onChange={(e) => setProdName(e.target.value)}
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio Anterior (Opcional)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="65.00"
-                    value={newProdOrigPrice}
-                    onChange={(e) => setNewProdOrigPrice(e.target.value)}
-                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Tu número de WhatsApp *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Ej. 8095551234 (con código de país si es posible)"
+                    value={prodWhatsapp}
+                    onChange={(e) => setProdWhatsapp(e.target.value)}
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Los compradores harán clic en "Ir al Producto" y les abrirá un chat directo contigo en WhatsApp.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Precio ($) (Opcional)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="49.99"
+                      value={prodPrice}
+                      onChange={(e) => setProdPrice(e.target.value)}
+                      className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Precio Anterior (Opcional)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="65.00"
+                      value={prodOrigPrice}
+                      onChange={(e) => setProdOrigPrice(e.target.value)}
+                      className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Categoría</label>
                   <select
-                    value={newProdCat}
-                    onChange={(e) => setNewProdCat(e.target.value)}
+                    value={prodCat}
+                    onChange={(e) => setProdCat(e.target.value)}
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   >
                     {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
@@ -719,76 +884,80 @@ export default function Home() {
                     ))}
                   </select>
                 </div>
+
+                {formMode === "admin" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Insignia Especial</label>
+                      <select
+                        value={prodBadge}
+                        onChange={(e) => setProdBadge(e.target.value as any)}
+                        className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                      >
+                        <option value="NINGUNO">Ninguna</option>
+                        <option value="DESTACADO">DESTACADO</option>
+                        <option value="OFERTA">OFERTA</option>
+                        <option value="POPULAR">POPULAR</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Vence el</label>
+                      <input
+                        type="date"
+                        value={prodExpires}
+                        onChange={(e) => setProdExpires(e.target.value)}
+                        className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Insignia Especial</label>
-                  <select
-                    value={newProdBadge}
-                    onChange={(e) => setNewProdBadge(e.target.value as any)}
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Foto del producto (link de imagen)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={prodImg}
+                    onChange={(e) => setProdImg(e.target.value)}
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                  >
-                    <option value="NINGUNO">Ninguna</option>
-                    <option value="DESTACADO">DESTACADO</option>
-                    <option value="OFERTA">OFERTA</option>
-                    <option value="POPULAR">POPULAR</option>
-                  </select>
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Sube tu foto a un servicio como Imgur o Postimages y pega aquí el link directo.
+                    (Subida de archivos propia requiere conectar almacenamiento en el backend.)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Descripción corta</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Escribe brevemente sobre el producto..."
+                    value={prodDesc}
+                    onChange={(e) => setProdDesc(e.target.value)}
+                    className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs resize-none"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Vence el (fecha de próximo pago)
-                </label>
-                <input
-                  type="date"
-                  value={newProdExpires}
-                  onChange={(e) => setNewProdExpires(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Si se pasa esta fecha, el producto se oculta a los clientes hasta que renueves.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">URL de Imagen (Opcional)</label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={newProdImg}
-                  onChange={(e) => setNewProdImg(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Descripción corta</label>
-                <textarea
-                  rows={2}
-                  placeholder="Escribe brevemente sobre el producto..."
-                  value={newProdDesc}
-                  onChange={(e) => setNewProdDesc(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs resize-none"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg"
-            >
-              Publicar en el Directorio
-            </button>
-          </form>
+              <button type="submit" className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg">
+                {isReviewingPending
+                  ? "Aprobar y Publicar"
+                  : editingId
+                  ? "Guardar Cambios"
+                  : formMode === "admin"
+                  ? "Publicar en el Directorio"
+                  : "Continuar al Pago"}
+              </button>
+            </form>
+          )}
         </div>
       )}
 
-      {/* Modal Ajustes del Admin */}
       {isConfigOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleSaveConfig}
-            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4"
-          >
+          <form onSubmit={handleSaveConfig} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-black text-slate-950 text-base">Ajustes del Admin</h3>
               <button
@@ -799,7 +968,6 @@ export default function Home() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Nuevo PIN de Acceso:</label>
@@ -821,15 +989,9 @@ export default function Home() {
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
                 />
               </div>
-              {pinConfigError && (
-                <p className="text-[10px] text-red-500 font-bold">{pinConfigError}</p>
-              )}
+              {pinConfigError && <p className="text-[10px] text-red-500 font-bold">{pinConfigError}</p>}
             </div>
-
-            <button
-              type="submit"
-              className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs"
-            >
+            <button type="submit" className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs">
               Guardar Ajustes
             </button>
           </form>
