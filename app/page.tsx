@@ -3,42 +3,36 @@
 import React, { useState, useEffect } from "react";
 import {
   Search,
-  Plus,
-  Minus,
-  ShoppingBag,
+  ExternalLink,
   Sparkles,
-  ArrowRight,
   Info,
-  Truck,
-  CreditCard,
-  User,
-  MapPin,
-  ShieldCheck,
-  X,
-  PackagePlus,
-  Trash2,
-  Settings,
+  CheckCircle2,
+  Clock,
   Lock,
   Unlock,
   Flame,
   Tag,
-  CheckCircle2,
-  Clock,
+  PackagePlus,
+  Trash2,
+  Settings,
+  X,
   KeyRound,
+  Link2,
 } from "lucide-react";
 
-export interface Product {
+export interface ProductLink {
   id: string;
   name: string;
   description: string;
-  price: number;
+  price?: number;
   originalPrice?: number;
   category: string;
   image: string;
-  badge?: "OFERTA" | "MÁS VENDIDO" | "NUEVO" | "NINGUNO";
+  targetUrl: string; // El link externo del producto o negocio que pagó
+  badge?: "DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO";
 }
 
-const DEFAULT_PRODUCTS: Product[] = [
+const DEFAULT_PRODUCTS: ProductLink[] = [
   {
     id: "demo-1",
     name: "Reloj Smartwatch Pro Edition",
@@ -47,7 +41,8 @@ const DEFAULT_PRODUCTS: Product[] = [
     originalPrice: 65.0,
     category: "Tecnología",
     image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
-    badge: "OFERTA",
+    targetUrl: "https://whatsapp.com",
+    badge: "DESTACADO",
   },
   {
     id: "demo-2",
@@ -56,24 +51,22 @@ const DEFAULT_PRODUCTS: Product[] = [
     price: 29.99,
     category: "Tecnología",
     image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
-    badge: "MÁS VENDIDO",
+    targetUrl: "https://whatsapp.com",
+    badge: "POPULAR",
   },
 ];
 
 const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorios", "Hogar"];
 
 export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [whatsappNumber, setWhatsappNumber] = useState("8091234567");
+  const [products, setProducts] = useState<ProductLink[]>([]);
   const [adminPin, setAdminPin] = useState("1234");
   const [isAdmin, setIsAdmin] = useState(false);
-  
+
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState<{ [key: string]: number }>({});
 
   // Modales
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -83,24 +76,19 @@ export default function Home() {
   const [pinError, setPinError] = useState(false);
   const [newPin, setNewPin] = useState("");
 
-  // Formulario Nuevo Producto
+  // Formulario Nuevo Producto / Enlace
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState("");
   const [newProdOrigPrice, setNewProdOrigPrice] = useState("");
   const [newProdCat, setNewProdCat] = useState("General");
-  const [newProdBadge, setNewProdBadge] = useState<"OFERTA" | "MÁS VENDIDO" | "NUEVO" | "NINGUNO">("NINGUNO");
+  const [newProdBadge, setNewProdBadge] = useState<"DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO">("NINGUNO");
   const [newProdDesc, setNewProdDesc] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
-
-  // Datos Cliente Checkout
-  const [customerName, setCustomerName] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Transferencia / Depósito");
+  const [newProdUrl, setNewProdUrl] = useState("");
 
   // Cargar datos locales o inicializar con Demo
   useEffect(() => {
     const savedProducts = localStorage.getItem("pediclick_products");
-    const savedPhone = localStorage.getItem("pediclick_phone");
     const savedPin = localStorage.getItem("pediclick_pin");
 
     if (savedProducts) {
@@ -115,11 +103,10 @@ export default function Home() {
       localStorage.setItem("pediclick_products", JSON.stringify(DEFAULT_PRODUCTS));
     }
 
-    if (savedPhone) setWhatsappNumber(savedPhone);
     if (savedPin) setAdminPin(savedPin);
   }, []);
 
-  const saveProductsToStorage = (updated: Product[]) => {
+  const saveProductsToStorage = (updated: ProductLink[]) => {
     setProducts(updated);
     localStorage.setItem("pediclick_products", JSON.stringify(updated));
   };
@@ -138,17 +125,18 @@ export default function Home() {
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProdName || !newProdPrice) return;
+    if (!newProdName) return;
 
-    const createdProduct: Product = {
+    const createdProduct: ProductLink = {
       id: Date.now().toString(),
       name: newProdName,
-      price: parseFloat(newProdPrice),
+      price: newProdPrice ? parseFloat(newProdPrice) : undefined,
       originalPrice: newProdOrigPrice ? parseFloat(newProdOrigPrice) : undefined,
       category: newProdCat,
       badge: newProdBadge,
       description: newProdDesc || "Sin descripción corta.",
       image: newProdImg || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+      targetUrl: newProdUrl || "#",
     };
 
     saveProductsToStorage([createdProduct, ...products]);
@@ -157,42 +145,26 @@ export default function Home() {
     setNewProdOrigPrice("");
     setNewProdDesc("");
     setNewProdImg("");
+    setNewProdUrl("");
     setNewProdBadge("NINGUNO");
     setIsAddProductOpen(false);
   };
 
   const handleDeleteProduct = (id: string) => {
-    if (confirm("¿Deseas eliminar este producto del catálogo?")) {
+    if (confirm("¿Deseas eliminar este producto del directorio?")) {
       const updated = products.filter((p) => p.id !== id);
       saveProductsToStorage(updated);
-      if (cart[id]) {
-        const { [id]: _, ...restCart } = cart;
-        setCart(restCart);
-      }
     }
   };
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem("pediclick_phone", whatsappNumber);
     if (newPin.trim().length >= 4) {
       localStorage.setItem("pediclick_pin", newPin);
       setAdminPin(newPin);
       setNewPin("");
     }
     setIsConfigOpen(false);
-  };
-
-  const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) => {
-      const current = prev[id] || 0;
-      const updated = current + delta;
-      if (updated <= 0) {
-        const { [id]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [id]: updated };
-    });
   };
 
   const filteredProducts = products.filter((p) => {
@@ -203,44 +175,8 @@ export default function Home() {
     return matchesCategory && matchesSearch;
   });
 
-  const totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
-  const totalPrice = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const product = products.find((p) => p.id === id);
-    return sum + (product ? product.price * qty : 0);
-  }, 0);
-
-  const sendWhatsAppOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (totalItems === 0) return;
-
-    const orderId = Math.floor(1000 + Math.random() * 9000);
-    let message = `🛒 *NUEVA ORDEN DE COMPRA #${orderId}*\n`;
-    message += `*PediClick Store*\n`;
-    message += `─────────────────────────\n\n`;
-    
-    if (customerName) message += `👤 *Cliente:* ${customerName}\n`;
-    if (customerAddress) message += `📍 *Dirección:* ${customerAddress}\n`;
-    message += `💳 *Método de Pago:* ${paymentMethod}\n\n`;
-    
-    message += `📦 *ARTÍCULOS SOLICITADOS:*\n`;
-    Object.entries(cart).forEach(([id, qty]) => {
-      const product = products.find((p) => p.id === id);
-      if (product) {
-        message += `▪️ *${qty}x* ${product.name}\n   └ Subtotal: *$${(product.price * qty).toFixed(2)}*\n`;
-      }
-    });
-
-    message += `\n─────────────────────────\n`;
-    message += `💰 *TOTAL A PAGAR:* *$${totalPrice.toFixed(2)} USD*\n\n`;
-    message += ` Quedo a la espera de la confirmación para realizar el pago.`;
-
-    const cleanPhone = whatsappNumber.replace(/\D/g, "");
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
-    setIsCheckoutOpen(false);
-  };
-
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-32">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-20">
       {/* Portada Superior */}
       <div className="relative h-60 sm:h-72 w-full bg-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-[#F8FAFC] via-slate-950/80 to-slate-950" />
@@ -250,28 +186,30 @@ export default function Home() {
       <div className="max-w-2xl mx-auto px-4 -mt-36 relative z-20">
         <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            
             {/* Logo */}
             <div className="relative group shrink-0">
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 p-[2px] shadow-xl shadow-slate-950/10">
                 <div className="w-full h-full bg-slate-950 rounded-[14px] flex flex-col items-center justify-center relative overflow-hidden">
-                  <ShoppingBag className="w-7 h-7 text-indigo-400 mb-0.5" />
+                  <Link2 className="w-7 h-7 text-indigo-400 mb-0.5" />
                   <div className="flex items-center gap-0.5 font-black text-sm tracking-tight text-white">
                     PediClick<span className="text-indigo-400">.</span>
                   </div>
                 </div>
               </div>
-              <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-1 shadow-md border-2 border-white" title="Verificado">
+              <span
+                className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-1 shadow-md border-2 border-white"
+                title="Plataforma Activa"
+              >
                 <CheckCircle2 className="w-3.5 h-3.5" />
               </span>
             </div>
 
-            {/* Información de la Tienda */}
+            {/* Información de la Plataforma */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <h1 className="text-2xl font-black tracking-tight text-slate-950">PediClick Store</h1>
+                <h1 className="text-2xl font-black tracking-tight text-slate-950">PediClick Directory</h1>
                 <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Tienda Oficial
+                  <Sparkles className="w-3 h-3" /> Enlaces Oficiales
                 </span>
                 {isAdmin && (
                   <button
@@ -284,20 +222,20 @@ export default function Home() {
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Catálogo digital en vivo. Haz tu pedido y recibe atención directa por WhatsApp.
+                Directorio digital de ofertas y productos destacados. Haz clic para ir al enlace oficial del vendedor.
               </p>
 
-              {/* Insignias de Confianza */}
+              {/* Insignias de la plataforma */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-4 text-xs font-semibold">
                 <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 px-3 py-1 rounded-xl border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Atendiendo Pedidos
+                  Catálogo en Vivo
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Respuestas Rápidas
+                  <Link2 className="w-3.5 h-3.5 text-slate-400" /> Links Directos
                 </span>
                 <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/60">
-                  <Truck className="w-3.5 h-3.5 text-slate-400" /> Envíos Seguros
+                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Ofertas Activas
                 </span>
               </div>
             </div>
@@ -321,10 +259,10 @@ export default function Home() {
             {isAdmin && (
               <button
                 onClick={() => setIsAddProductOpen(true)}
-                className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0 animate-in fade-in"
+                className="bg-slate-950 hover:bg-indigo-600 text-white px-4 py-3.5 rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all shrink-0"
               >
                 <PackagePlus className="w-4 h-4" />
-                <span className="hidden sm:inline">Nuevo Producto</span>
+                <span className="hidden sm:inline">Publicar Enlace</span>
               </button>
             )}
           </div>
@@ -350,10 +288,10 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Catálogo de Productos */}
+        {/* Lista de Productos / Enlaces */}
         <div className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-black text-slate-950 text-lg tracking-tight">Catálogo de Productos</h2>
+            <h2 className="font-black text-slate-950 text-lg tracking-tight">Productos Promocionados</h2>
             <span className="text-xs text-slate-400 font-semibold">{filteredProducts.length} artículos</span>
           </div>
 
@@ -362,10 +300,10 @@ export default function Home() {
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-400">
                 <Info className="w-6 h-6" />
               </div>
-              <h3 className="text-slate-950 font-black text-base">Catálogo en Actualización</h3>
+              <h3 className="text-slate-950 font-black text-base">Directorio en Actualización</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
                 {isAdmin
-                  ? "Aún no has agregado productos. Presiona el botón para incluir los primeros artículos."
+                  ? "Aún no has agregado productos. Presiona el botón para incluir el primer producto con su enlace."
                   : "No hay productos disponibles en esta sección por el momento."}
               </p>
               {isAdmin ? (
@@ -373,21 +311,19 @@ export default function Home() {
                   onClick={() => setIsAddProductOpen(true)}
                   className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
                 >
-                  <PackagePlus className="w-4 h-4" /> Agregar Producto
+                  <PackagePlus className="w-4 h-4" /> Publicar Producto
                 </button>
               ) : (
                 <button
                   onClick={() => setIsAdminModalOpen(true)}
                   className="mt-5 inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs transition-all"
                 >
-                  <Lock className="w-3.5 h-3.5" /> ¿Eres el dueño? Acceder con PIN
+                  <Lock className="w-3.5 h-3.5" /> ¿Eres el administrador? Acceder con PIN
                 </button>
               )}
             </div>
           ) : (
             filteredProducts.map((p) => {
-              const qty = cart[p.id] || 0;
-
               return (
                 <div
                   key={p.id}
@@ -406,19 +342,19 @@ export default function Home() {
                         className={`absolute top-2 left-2 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wider text-white uppercase shadow-md flex items-center gap-1 ${
                           p.badge === "OFERTA"
                             ? "bg-red-500"
-                            : p.badge === "MÁS VENDIDO"
+                            : p.badge === "POPULAR"
                             ? "bg-amber-500"
                             : "bg-indigo-600"
                         }`}
                       >
                         {p.badge === "OFERTA" && <Tag className="w-2.5 h-2.5" />}
-                        {p.badge === "MÁS VENDIDO" && <Flame className="w-2.5 h-2.5" />}
+                        {p.badge === "POPULAR" && <Flame className="w-2.5 h-2.5" />}
                         {p.badge}
                       </span>
                     )}
                   </div>
 
-                  {/* Detalles */}
+                  {/* Detalles del Producto */}
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-bold text-slate-950 text-base leading-snug">{p.name}</h3>
@@ -436,46 +372,32 @@ export default function Home() {
                       {p.description}
                     </p>
 
-                    <div className="flex items-baseline gap-2 mt-3">
-                      <span className="font-black text-slate-950 text-base flex items-baseline gap-0.5">
-                        ${p.price.toFixed(2)}
-                        <span className="text-[10px] text-slate-400 font-normal">USD</span>
-                      </span>
-
-                      {p.originalPrice && p.originalPrice > p.price && (
-                        <span className="text-xs text-slate-400 line-through font-semibold">
-                          ${p.originalPrice.toFixed(2)}
+                    {p.price && (
+                      <div className="flex items-baseline gap-2 mt-3">
+                        <span className="font-black text-slate-950 text-base flex items-baseline gap-0.5">
+                          ${p.price.toFixed(2)}
+                          <span className="text-[10px] text-slate-400 font-normal">USD</span>
                         </span>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Controles de Carrito */}
-                  <div className="w-full sm:w-auto flex justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    {qty === 0 ? (
-                      <button
-                        onClick={() => updateQuantity(p.id, 1)}
-                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
-                      >
-                        <Plus className="w-4 h-4" /> Añadir al Carrito
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
-                        <button
-                          onClick={() => updateQuantity(p.id, -1)}
-                          className="w-8 h-8 rounded-xl bg-white text-slate-950 flex items-center justify-center shadow-sm hover:bg-slate-200"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-black text-xs text-slate-950 w-4 text-center">{qty}</span>
-                        <button
-                          onClick={() => updateQuantity(p.id, 1)}
-                          className="w-8 h-8 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-sm hover:bg-indigo-600"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                        {p.originalPrice && p.originalPrice > p.price && (
+                          <span className="text-xs text-slate-400 line-through font-semibold">
+                            ${p.originalPrice.toFixed(2)}
+                          </span>
+                        )}
                       </div>
                     )}
+                  </div>
+
+                  {/* Botón Redirección al Link del Cliente */}
+                  <div className="w-full sm:w-auto flex justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <a
+                      href={p.targetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-950 hover:bg-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+                    >
+                      Ir al Producto <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                   </div>
                 </div>
               );
@@ -483,9 +405,9 @@ export default function Home() {
           )}
         </div>
 
-        {/* Pie de página con acceso discreto a Administración */}
+        {/* Pie de página */}
         <footer className="mt-16 text-center border-t border-slate-200/70 pt-8 pb-4 text-slate-400 text-xs flex flex-col items-center gap-2">
-          <p className="font-semibold text-slate-500">PediClick Store &copy; 2026</p>
+          <p className="font-semibold text-slate-500">PediClick Directory &copy; 2026</p>
 
           <button
             onClick={() => {
@@ -502,14 +424,14 @@ export default function Home() {
             ) : (
               <>
                 <Lock className="w-3 h-3" />
-                <span>Acceso Dueño</span>
+                <span>Acceso Dueño / Admin</span>
               </>
             )}
           </button>
         </footer>
       </div>
 
-      {/* Modal Autenticación por PIN */}
+      {/* Modal Autenticación PIN Admin */}
       {isAdminModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -530,7 +452,7 @@ export default function Home() {
 
             <div>
               <h3 className="font-black text-slate-950 text-base">Modo Administrador</h3>
-              <p className="text-xs text-slate-500 mt-1">Ingresa tu clave PIN para gestionar el catálogo</p>
+              <p className="text-xs text-slate-500 mt-1">Ingresa tu PIN para publicar o gestionar enlaces</p>
             </div>
 
             <div>
@@ -562,7 +484,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal Agregar Producto */}
+      {/* Modal Agregar Nuevo Producto / Enlace Patrocinado */}
       {isAddProductOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
@@ -570,7 +492,7 @@ export default function Home() {
             className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Agregar Nuevo Producto</h3>
+              <h3 className="font-black text-slate-950 text-lg">Publicar Nuevo Producto</h3>
               <button
                 type="button"
                 onClick={() => setIsAddProductOpen(false)}
@@ -582,7 +504,7 @@ export default function Home() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del Producto *</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nombre del Producto / Oferta *</label>
                 <input
                   type="text"
                   required
@@ -593,13 +515,24 @@ export default function Home() {
                 />
               </div>
 
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Link de Destino / WhatsApp del Cliente *</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://wa.me/809... o https://tienda.com/producto"
+                  value={newProdUrl}
+                  onChange={(e) => setNewProdUrl(e.target.value)}
+                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio ($) *</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Precio ($) (Opcional)</label>
                   <input
                     type="number"
                     step="0.01"
-                    required
                     placeholder="49.99"
                     value={newProdPrice}
                     onChange={(e) => setNewProdPrice(e.target.value)}
@@ -628,7 +561,9 @@ export default function Home() {
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   >
                     {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -640,9 +575,9 @@ export default function Home() {
                     className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
                   >
                     <option value="NINGUNO">Ninguna</option>
+                    <option value="DESTACADO">DESTACADO</option>
                     <option value="OFERTA">OFERTA</option>
-                    <option value="MÁS VENDIDO">MÁS VENDIDO</option>
-                    <option value="NUEVO">NUEVO</option>
+                    <option value="POPULAR">POPULAR</option>
                   </select>
                 </div>
               </div>
@@ -674,13 +609,13 @@ export default function Home() {
               type="submit"
               className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg"
             >
-              Publicar en el Catálogo
+              Publicar en el Directorio
             </button>
           </form>
         </div>
       )}
 
-      {/* Modal Ajustes del Negocio */}
+      {/* Modal Ajustes del Admin */}
       {isConfigOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -688,7 +623,7 @@ export default function Home() {
             className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-base">Ajustes del Negocio</h3>
+              <h3 className="font-black text-slate-950 text-base">Ajustes del Admin</h3>
               <button
                 type="button"
                 onClick={() => setIsConfigOpen(false)}
@@ -700,22 +635,10 @@ export default function Home() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">WhatsApp de Recepción de Pedidos:</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="8091234567"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Cambiar Clave PIN (Opcional):</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Cambiar Clave PIN de Acceso:</label>
                 <input
                   type="password"
-                  placeholder="Nuevo PIN de acceso"
+                  placeholder="Nuevo PIN (mín. 4 caracteres)"
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value)}
                   className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono"
@@ -727,113 +650,9 @@ export default function Home() {
               type="submit"
               className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl text-xs"
             >
-              Guardar Cambios
+              Guardar Ajustes
             </button>
           </form>
-        </div>
-      )}
-
-      {/* Modal Checkout / Finalizar Pedido */}
-      {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <form
-            onSubmit={sendWhatsAppOrder}
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-950 text-lg">Confirmar Pedido</h3>
-              <button
-                type="button"
-                onClick={() => setIsCheckoutOpen(false)}
-                className="bg-slate-100 p-2 rounded-full text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                  <User className="w-3.5 h-3.5 text-slate-400" /> Nombre Completo:
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Juan Pérez"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Dirección de Entrega:
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Calle Principal #12"
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                  <CreditCard className="w-3.5 h-3.5 text-slate-400" /> Forma de Pago:
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs"
-                >
-                  <option value="Transferencia / Depósito">Transferencia / Depósito Bancario</option>
-                  <option value="Pago contra Entrega (Efectivo)">Pago contra Entrega (Efectivo)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Final</span>
-                <span className="text-lg font-black text-slate-950">${totalPrice.toFixed(2)} USD</span>
-              </div>
-              <button
-                type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg"
-              >
-                Enviar por WhatsApp <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Barra Flotante de Compra */}
-      {totalItems > 0 && (
-        <div className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto z-40">
-          <button
-            onClick={() => setIsCheckoutOpen(true)}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between font-bold text-sm border border-emerald-400/30 backdrop-blur-lg"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-700/60 flex items-center justify-center font-black text-sm border border-white/20">
-                {totalItems}
-              </div>
-              <div className="text-left">
-                <p className="text-xs text-emerald-100 font-medium leading-none">Tu Carrito</p>
-                <p className="font-extrabold text-white text-sm mt-1 flex items-center gap-1">
-                  Finalizar Pedido <ArrowRight className="w-4 h-4 ml-0.5" />
-                </p>
-              </div>
-            </div>
-            <div className="text-right pl-4 border-l border-emerald-500/40">
-              <span className="text-[10px] text-emerald-200 block uppercase font-bold tracking-wider">Total</span>
-              <span className="text-lg font-black text-white">${totalPrice.toFixed(2)}</span>
-            </div>
-          </button>
         </div>
       )}
     </div>
