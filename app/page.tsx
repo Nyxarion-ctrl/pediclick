@@ -38,6 +38,28 @@ export interface Product {
   badge?: "OFERTA" | "MÁS VENDIDO" | "NUEVO" | "NINGUNO";
 }
 
+const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "demo-1",
+    name: "Reloj Smartwatch Pro Edition",
+    description: "Pantalla AMOLED, monitoreo de salud 24/7 y batería de 10 días.",
+    price: 45.0,
+    originalPrice: 65.0,
+    category: "Tecnología",
+    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+    badge: "OFERTA",
+  },
+  {
+    id: "demo-2",
+    name: "Audífonos Inalámbricos BassPro",
+    description: "Cancelación de ruido activa, micrófono HD para llamadas y estuche de carga rápida.",
+    price: 29.99,
+    category: "Tecnología",
+    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
+    badge: "MÁS VENDIDO",
+  },
+];
+
 const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorios", "Hogar"];
 
 export default function Home() {
@@ -75,15 +97,24 @@ export default function Home() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Transferencia / Depósito");
 
-  // Cargar datos locales al iniciar
+  // Cargar datos locales o inicializar con Demo
   useEffect(() => {
     const savedProducts = localStorage.getItem("pediclick_products");
     const savedPhone = localStorage.getItem("pediclick_phone");
     const savedPin = localStorage.getItem("pediclick_pin");
 
     if (savedProducts) {
-      try { setProducts(JSON.parse(savedProducts)); } catch (e) {}
+      try {
+        const parsed = JSON.parse(savedProducts);
+        setProducts(parsed);
+      } catch (e) {
+        setProducts(DEFAULT_PRODUCTS);
+      }
+    } else {
+      setProducts(DEFAULT_PRODUCTS);
+      localStorage.setItem("pediclick_products", JSON.stringify(DEFAULT_PRODUCTS));
     }
+
     if (savedPhone) setWhatsappNumber(savedPhone);
     if (savedPin) setAdminPin(savedPin);
   }, []);
@@ -93,7 +124,6 @@ export default function Home() {
     localStorage.setItem("pediclick_products", JSON.stringify(updated));
   };
 
-  // Autenticación de Administrador por PIN
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputPin === adminPin) {
@@ -288,7 +318,6 @@ export default function Home() {
               />
             </div>
 
-            {/* Botón visible únicamente si está en Modo Admin */}
             {isAdmin && (
               <button
                 onClick={() => setIsAddProductOpen(true)}
@@ -339,12 +368,19 @@ export default function Home() {
                   ? "Aún no has agregado productos. Presiona el botón para incluir los primeros artículos."
                   : "No hay productos disponibles en esta sección por el momento."}
               </p>
-              {isAdmin && (
+              {isAdmin ? (
                 <button
                   onClick={() => setIsAddProductOpen(true)}
                   className="mt-5 inline-flex items-center gap-2 bg-slate-950 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all"
                 >
                   <PackagePlus className="w-4 h-4" /> Agregar Producto
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsAdminModalOpen(true)}
+                  className="mt-5 inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs transition-all"
+                >
+                  <Lock className="w-3.5 h-3.5" /> ¿Eres el dueño? Acceder con PIN
                 </button>
               )}
             </div>
