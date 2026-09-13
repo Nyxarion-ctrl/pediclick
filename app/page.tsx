@@ -23,56 +23,8 @@ import {
   BadgeCheck,
   CreditCard,
 } from "lucide-react";
-
-export type ProductStatus = "pending" | "approved";
-
-export interface ProductLink {
-  id: string;
-  name: string;
-  description: string;
-  price?: number;
-  originalPrice?: number;
-  category: string;
-  image: string;
-  whatsapp: string; // número que ingresó el vendedor, ej. "8095551234"
-  targetUrl: string; // se genera automáticamente como https://wa.me/<whatsapp>
-  badge?: "DESTACADO" | "OFERTA" | "POPULAR" | "NINGUNO";
-  expiresAt?: string; // ISO date — próxima fecha de renovación del vendedor
-  status: ProductStatus; // "pending" = esperando que apruebes el pago; "approved" = visible al público
-  submittedAt: string;
-}
-
-const DEFAULT_PRODUCTS: ProductLink[] = [
-  {
-    id: "demo-1",
-    name: "Reloj Smartwatch Pro Edition",
-    description: "Pantalla AMOLED, monitoreo de salud 24/7 y batería de 10 días.",
-    price: 45.0,
-    originalPrice: 65.0,
-    category: "Tecnología",
-    image:
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
-    whatsapp: "18095550101",
-    targetUrl: "https://wa.me/18095550101",
-    badge: "DESTACADO",
-    status: "approved",
-    submittedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-2",
-    name: "Audífonos Inalámbricos BassPro",
-    description: "Cancelación de ruido activa, micrófono HD para llamadas y estuche de carga rápida.",
-    price: 29.99,
-    category: "Tecnología",
-    image:
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
-    whatsapp: "18095550102",
-    targetUrl: "https://wa.me/18095550102",
-    badge: "POPULAR",
-    status: "approved",
-    submittedAt: new Date().toISOString(),
-  },
-];
+import { products as productsService } from "@/lib/products";
+import type { ProductLink, ProductStatus } from "@/lib/types";
 
 const CATEGORIES = ["Todos", "General", "Tecnología", "Ropa & Moda", "Accesorios", "Hogar"];
 const FALLBACK_IMAGE =
@@ -85,53 +37,21 @@ const BADGE_PRIORITY: Record<string, number> = {
 };
 
 // TODO: reemplaza estos dos links por tus checkouts reales de suscripción mensual
-// (un "Payment Link" de Lemon Squeezy y un "Subscribe" link de un plan de PayPal).
 const LEMON_CHECKOUT_URL = "https://tu-tienda.lemonsqueezy.com/checkout/buy/REEMPLAZA-ESTE-ID";
 const PAYPAL_CHECKOUT_URL =
   "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=REEMPLAZA-ESTE-ID";
 
 /**
- * ADAPTADOR DE ALMACENAMIENTO
- * ---------------------------
- * Toda lectura/escritura de datos pasa por aquí. Hoy usa localStorage, lo cual
- * significa que cada visitante ve solo SU PROPIA copia del catálogo — el admin
- * publica en su navegador y nadie más lo ve, y las solicitudes públicas tampoco
- * llegan realmente al admin desde otro dispositivo.
- *
- * Para pasar a un backend real (recomendado: Supabase), reescribe estas
- * funciones para que hagan fetch() a tu API en vez de leer/escribir
- * localStorage. El resto del componente no necesita cambiar.
- *
- * Este es también el lugar donde, más adelante, un webhook de Lemon
- * Squeezy/PayPal marcaría automáticamente un producto como "approved" en
- * cuanto se confirme el pago — hoy esa aprobación la haces tú a mano.
+ * El PIN de admin sigue viviendo en localStorage por ahora (es independiente
+ * del catálogo, que ya vive en Supabase). Sigue siendo inseguro porque se
+ * valida en el navegador — pendiente de mover a una ruta de servidor.
  */
-const storage = {
-  async getProducts(): Promise<ProductLink[]> {
-    if (typeof window === "undefined") return DEFAULT_PRODUCTS;
-    const saved = localStorage.getItem("pediclick_products");
-    if (!saved) {
-      localStorage.setItem("pediclick_products", JSON.stringify(DEFAULT_PRODUCTS));
-      return DEFAULT_PRODUCTS;
-    }
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return DEFAULT_PRODUCTS;
-    }
-  },
-  async saveProducts(products: ProductLink[]): Promise<void> {
-    localStorage.setItem("pediclick_products", JSON.stringify(products));
-  },
-  async getPin(): Promise<string> {
+const pinStorage = {
+  async get(): Promise<string> {
     if (typeof window === "undefined") return "1491";
     return localStorage.getItem("pediclick_pin") || "1491";
   },
-  // NOTA DE SEGURIDAD: esta validación ocurre en el navegador del cliente.
-  // Cualquiera con DevTools puede forzar isAdmin=true sin el PIN correcto.
-  // Antes de manejar pagos reales, esto debe validarse en un endpoint de
-  // servidor que devuelva un token de sesión.
-  async setPin(pin: string): Promise<void> {
+  async set(pin: string): Promise<void> {
     localStorage.setItem("pediclick_pin", pin);
   },
 };
@@ -145,15 +65,15 @@ function isExpired(product: ProductLink): boolean {
   return new Date(product.expiresAt).getTime() < Date.now();
 }
 
-function sortProducts(products: ProductLink[]): ProductLink[] {
-  return [...products].sort((a, b) => {
+function sortProducts(list: ProductLink[]): ProductLink[] {
+  return [...list].sort((a, b) => {
     const aExpired = isExpired(a) ? 1 : 0;
     const bExpired = isExpired(b) ? 1 : 0;
-    if (aExpired !== bExpired) return aExpired - bExpired; // vencidos al final
+    if (aExpired !== bExpired) return aExpired - bExpired;
     const aPriority = BADGE_PRIORITY[a.badge || "NINGUNO"];
     const bPriority = BADGE_PRIORITY[b.badge || "NINGUNO"];
     if (aPriority !== bPriority) return aPriority - bPriority;
-    return Number(b.id) - Number(a.id) || 0; // más reciente primero dentro del mismo tier
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
   });
 }
 
@@ -165,6 +85,7 @@ export default function Home() {
   const [adminPin, setAdminPin] = useState("1491");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [search, setSearch] = useState("");
@@ -191,6 +112,7 @@ export default function Home() {
   const [prodDesc, setProdDesc] = useState("");
   const [prodImg, setProdImg] = useState("");
   const [prodExpires, setProdExpires] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
   const showToast = useCallback((msg: string) => {
@@ -198,14 +120,25 @@ export default function Home() {
     window.setTimeout(() => setToast(null), 2500);
   }, []);
 
+  const refreshProducts = useCallback(async () => {
+    try {
+      const data = await productsService.getAll();
+      setProducts(data);
+      setLoadError(null);
+    } catch (err) {
+      console.error(err);
+      setLoadError("No se pudo cargar el directorio. Revisa tu conexión o la configuración de Supabase.");
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
-      const [savedProducts, savedPin] = await Promise.all([storage.getProducts(), storage.getPin()]);
-      setProducts(savedProducts);
+      const savedPin = await pinStorage.get();
       setAdminPin(savedPin);
+      await refreshProducts();
       setLoading(false);
     })();
-  }, []);
+  }, [refreshProducts]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -218,11 +151,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const saveProductsToStorage = async (updated: ProductLink[]) => {
-    setProducts(updated);
-    await storage.saveProducts(updated);
-  };
 
   const resetForm = () => {
     setProdName("");
@@ -282,79 +210,87 @@ export default function Home() {
     if (!prodName || whatsappDigits.length < 8) return;
 
     const targetUrl = `https://wa.me/${whatsappDigits}`;
+    setSubmitting(true);
 
-    if (editingId) {
-      const existing = products.find((p) => p.id === editingId);
-      const nextStatus: ProductStatus =
-        existing?.status === "pending" && isAdmin ? "approved" : existing?.status ?? "approved";
+    try {
+      if (editingId) {
+        const existing = products.find((p) => p.id === editingId);
+        const nextStatus: ProductStatus =
+          existing?.status === "pending" && isAdmin ? "approved" : existing?.status ?? "approved";
 
-      const updated = products.map((p) =>
-        p.id === editingId
-          ? {
-              ...p,
-              name: prodName,
-              whatsapp: whatsappDigits,
-              targetUrl,
-              price: prodPrice ? parseFloat(prodPrice) : undefined,
-              originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
-              category: prodCat,
-              badge: prodBadge,
-              description: prodDesc || "Sin descripción corta.",
-              image: prodImg || FALLBACK_IMAGE,
-              expiresAt: prodExpires || undefined,
-              status: nextStatus,
-            }
-          : p
-      );
-      await saveProductsToStorage(updated);
-      showToast(
-        nextStatus === "approved" && existing?.status === "pending"
-          ? "Solicitud aprobada y publicada ✅"
-          : "Cambios guardados"
-      );
-      closeForm();
-      return;
-    }
+        await productsService.update(editingId, {
+          name: prodName,
+          whatsapp: whatsappDigits,
+          targetUrl,
+          price: prodPrice ? parseFloat(prodPrice) : undefined,
+          originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
+          category: prodCat,
+          badge: prodBadge,
+          description: prodDesc || "Sin descripción corta.",
+          image: prodImg || FALLBACK_IMAGE,
+          expiresAt: prodExpires || undefined,
+          status: nextStatus,
+        });
+        await refreshProducts();
+        showToast(
+          nextStatus === "approved" && existing?.status === "pending"
+            ? "Solicitud aprobada y publicada ✅"
+            : "Cambios guardados"
+        );
+        closeForm();
+        return;
+      }
 
-    const created: ProductLink = {
-      id: Date.now().toString(),
-      name: prodName,
-      whatsapp: whatsappDigits,
-      targetUrl,
-      price: prodPrice ? parseFloat(prodPrice) : undefined,
-      originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
-      category: prodCat,
-      badge: formMode === "admin" ? prodBadge : "NINGUNO",
-      description: prodDesc || "Sin descripción corta.",
-      image: prodImg || FALLBACK_IMAGE,
-      expiresAt: formMode === "admin" ? prodExpires || undefined : undefined,
-      status: formMode === "admin" ? "approved" : "pending",
-      submittedAt: new Date().toISOString(),
-    };
+      await productsService.create({
+        name: prodName,
+        whatsapp: whatsappDigits,
+        targetUrl,
+        price: prodPrice ? parseFloat(prodPrice) : undefined,
+        originalPrice: prodOrigPrice ? parseFloat(prodOrigPrice) : undefined,
+        category: prodCat,
+        badge: formMode === "admin" ? prodBadge : "NINGUNO",
+        description: prodDesc || "Sin descripción corta.",
+        image: prodImg || FALLBACK_IMAGE,
+        expiresAt: formMode === "admin" ? prodExpires || undefined : undefined,
+        status: formMode === "admin" ? "approved" : "pending",
+      });
+      await refreshProducts();
 
-    await saveProductsToStorage([created, ...products]);
-
-    if (formMode === "public") {
-      setFormStep("payment");
-    } else {
-      showToast("Producto publicado ✅");
-      closeForm();
+      if (formMode === "public") {
+        setFormStep("payment");
+      } else {
+        showToast("Producto publicado ✅");
+        closeForm();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Ocurrió un error al guardar. Intenta de nuevo.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleRejectPending = async (id: string) => {
-    if (confirm("¿Rechazar y eliminar esta solicitud?")) {
-      const updated = products.filter((p) => p.id !== id);
-      await saveProductsToStorage(updated);
+    if (!confirm("¿Rechazar y eliminar esta solicitud?")) return;
+    try {
+      await productsService.remove(id);
+      await refreshProducts();
       showToast("Solicitud rechazada");
+    } catch (err) {
+      console.error(err);
+      showToast("No se pudo rechazar la solicitud.");
     }
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (confirm("¿Deseas eliminar este producto del directorio?")) {
-      const updated = products.filter((p) => p.id !== id);
-      await saveProductsToStorage(updated);
+    if (!confirm("¿Deseas eliminar este producto del directorio?")) return;
+    try {
+      await productsService.remove(id);
+      await refreshProducts();
       showToast("Producto eliminado");
+    } catch (err) {
+      console.error(err);
+      showToast("No se pudo eliminar el producto.");
     }
   };
 
@@ -369,7 +305,7 @@ export default function Home() {
       setPinConfigError("Los dos PIN no coinciden.");
       return;
     }
-    await storage.setPin(newPin);
+    await pinStorage.set(newPin);
     setAdminPin(newPin);
     setNewPin("");
     setNewPinConfirm("");
@@ -473,6 +409,12 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {loadError && (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-2xl p-3 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" /> {loadError}
+          </div>
+        )}
 
         <div className="mt-6 space-y-4">
           <div className="flex items-center gap-2">
@@ -925,7 +867,6 @@ export default function Home() {
                   />
                   <p className="text-[10px] text-slate-400 mt-1">
                     Sube tu foto a un servicio como Imgur o Postimages y pega aquí el link directo.
-                    (Subida de archivos propia requiere conectar almacenamiento en el backend.)
                   </p>
                 </div>
 
@@ -941,8 +882,14 @@ export default function Home() {
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg">
-                {isReviewingPending
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-slate-950 text-white font-bold py-3.5 rounded-2xl text-xs shadow-lg disabled:opacity-60"
+              >
+                {submitting
+                  ? "Guardando..."
+                  : isReviewingPending
                   ? "Aprobar y Publicar"
                   : editingId
                   ? "Guardar Cambios"
