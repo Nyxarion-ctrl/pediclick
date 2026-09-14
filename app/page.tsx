@@ -41,21 +41,6 @@ const LEMON_CHECKOUT_URL = "https://tu-tienda.lemonsqueezy.com/checkout/buy/REEM
 const PAYPAL_CHECKOUT_URL =
   "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=REEMPLAZA-ESTE-ID";
 
-/**
- * El PIN de admin sigue viviendo en localStorage por ahora (es independiente
- * del catálogo, que ya vive en Supabase). Sigue siendo inseguro porque se
- * valida en el navegador — pendiente de mover a una ruta de servidor.
- */
-const pinStorage = {
-  async get(): Promise<string> {
-    if (typeof window === "undefined") return "1491";
-    return localStorage.getItem("pediclick_pin") || "1491";
-  },
-  async set(pin: string): Promise<void> {
-    localStorage.setItem("pediclick_pin", pin);
-  },
-};
-
 function digitsOnly(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
 }
@@ -82,7 +67,6 @@ type FormStep = "form" | "payment";
 
 export default function Home() {
   const [products, setProducts] = useState<ProductLink[]>([]);
-  const [adminPin, setAdminPin] = useState("1491");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -127,14 +111,19 @@ export default function Home() {
       setLoadError(null);
     } catch (err) {
       console.error(err);
-      setLoadError("No se pudo cargar el directorio. Revisa tu conexión o la configuración de Supabase.");
+      setLoadError("No se pudo cargar el directorio. Intenta de nuevo en un momento.");
     }
   }, []);
 
   useEffect(() => {
     (async () => {
-      const savedPin = await pinStorage.get();
-      setAdminPin(savedPin);
+      try {
+        const res = await fetch("/api/admin/session");
+        const { isAdmin: adminFromSession } = await res.json();
+        setIsAdmin(!!adminFromSession);
+      } catch {
+        setIsAdmin(false);
+      }
       await refreshProducts();
       setLoading(false);
     })();
@@ -191,17 +180,33 @@ export default function Home() {
     setFormStep("form");
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputPin === adminPin) {
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: inputPin }),
+      });
+      if (!res.ok) {
+        setPinError(true);
+        return;
+      }
       setIsAdmin(true);
       setIsAdminModalOpen(false);
       setInputPin("");
       setPinError(false);
       showToast("Sesión de administrador iniciada");
-    } else {
+      await refreshProducts(); // ahora sí trae también los pendientes
+    } catch {
       setPinError(true);
     }
+  };
+
+  const handleAdminLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" });
+    setIsAdmin(false);
+    await refreshProducts();
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -241,6 +246,9 @@ export default function Home() {
         return;
       }
 
+      // Nota: el servidor decide de verdad si esto queda "pending" o
+      // "approved" según tu sesión de admin — lo que mandemos aquí es solo
+      // una sugerencia que el servidor puede ignorar si no eres admin.
       await productsService.create({
         name: prodName,
         whatsapp: whatsappDigits,
@@ -305,12 +313,23 @@ export default function Home() {
       setPinConfigError("Los dos PIN no coinciden.");
       return;
     }
-    await pinStorage.set(newPin);
-    setAdminPin(newPin);
-    setNewPin("");
-    setNewPinConfirm("");
-    setIsConfigOpen(false);
-    showToast("PIN actualizado correctamente");
+    try {
+      const res = await fetch("/api/admin/pin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPin }),
+      });
+      if (!res.ok) {
+        setPinConfigError("No se pudo actualizar el PIN.");
+        return;
+      }
+      setNewPin("");
+      setNewPinConfirm("");
+      setIsConfigOpen(false);
+      showToast("PIN actualizado correctamente");
+    } catch {
+      setPinConfigError("No se pudo actualizar el PIN.");
+    }
   };
 
   const pendingProducts = products
@@ -630,7 +649,7 @@ export default function Home() {
           <p className="font-semibold text-slate-500">PediClick Directory &copy; 2026</p>
           <button
             onClick={() => {
-              if (isAdmin) setIsAdmin(false);
+              if (isAdmin) handleAdminLogout();
               else setIsAdminModalOpen(true);
             }}
             className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-700 transition-colors mt-1"
