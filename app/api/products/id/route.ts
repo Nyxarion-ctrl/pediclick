@@ -9,15 +9,16 @@ async function requireAdmin(): Promise<boolean> {
   return isValidSessionCookieValue(cookieStore.get(ADMIN_COOKIE_NAME)?.value);
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export async function PATCH(req: NextRequest, props: Props) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { id } = await params;
+  const { id } = await props.params;
   const body = await req.json();
 
   const { data, error } = await supabaseAdmin
@@ -33,15 +34,12 @@ export async function PATCH(
   return NextResponse.json(rowToProduct(data));
 }
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_req: NextRequest, props: Props) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { id } = await params;
+  const { id } = await props.params;
   const { error } = await supabaseAdmin.from("products").delete().eq("id", id);
 
   if (error) {
