@@ -80,7 +80,10 @@ export default function Home() {
 
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-
+const [sellerPhone, setSellerPhone] = useState("");
+const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+const [paymentTab, setPaymentTab] = useState<"DOP" | "USD">("DOP");
+  
   const [inputPin, setInputPin] = useState("");
   const [pinError, setPinError] = useState(false);
   const [newPin, setNewPin] = useState("");
@@ -180,41 +183,18 @@ export default function Home() {
     setFormStep("form");
   };
 
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: inputPin }),
-      });
-      if (!res.ok) {
-        setPinError(true);
-        return;
-      }
-      setIsAdmin(true);
-      setIsAdminModalOpen(false);
-      setInputPin("");
-      setPinError(false);
-      showToast("Sesión de administrador iniciada");
-      await refreshProducts(); // ahora sí trae también los pendientes
-    } catch {
-      setPinError(true);
-    }
-  };
-
-  const handleAdminLogout = async () => {
-    await fetch("/api/admin/logout", { method: "POST" });
-    setIsAdmin(false);
-    await refreshProducts();
-  };
-
-  const handleFormSubmit = async (e: React.FormEvent) => {
+ const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const whatsappDigits = digitsOnly(prodWhatsapp);
     if (!prodName || whatsappDigits.length < 8) return;
 
-    const targetUrl = `https://wa.me/${whatsappDigits}`;
+    // Generar la URL de WhatsApp con mensaje preformateado
+    const priceText = prodPrice ? `$${prodPrice}` : "consultar";
+    const message = encodeURIComponent(
+      `¡Hola! Vi tu producto "${prodName}" en PediClick por ${priceText} y me interesa comprarlo.`
+    );
+    const targetUrl = `https://wa.me/${whatsappDigits}?text=${message}`;
+
     setSubmitting(true);
 
     try {
@@ -246,9 +226,6 @@ export default function Home() {
         return;
       }
 
-      // Nota: el servidor decide de verdad si esto queda "pending" o
-      // "approved" según tu sesión de admin — lo que mandemos aquí es solo
-      // una sugerencia que el servidor puede ignorar si no eres admin.
       await productsService.create({
         name: prodName,
         whatsapp: whatsappDigits,
@@ -265,7 +242,8 @@ export default function Home() {
       await refreshProducts();
 
       if (formMode === "public") {
-        setFormStep("payment");
+        closeForm();
+        setIsPaymentModalOpen(true); // Abre el modal desplegable con las cuentas
       } else {
         showToast("Producto publicado ✅");
         closeForm();
@@ -963,6 +941,67 @@ export default function Home() {
           </form>
         </div>
       )}
+</div>
+      )}
+
+      {/* PASTE AQUÍ EL MODAL DE PAGO */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <h3 className="text-xl font-bold text-slate-900">¡Producto Creado! 🚀</h3>
+            <p className="text-sm text-slate-600">
+              Para activar la publicación en el directorio principal, realiza el pago según tu moneda:
+            </p>
+
+            <div className="flex border-b border-slate-200">
+              <button
+                type="button"
+                onClick={() => setPaymentTab("DOP")}
+                className={`flex-1 py-2 font-bold text-sm border-b-2 ${
+                  paymentTab === "DOP" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+                }`}
+              >
+                Rep. Dominicana (DOP)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTab("USD")}
+                className={`flex-1 py-2 font-bold text-sm border-b-2 ${
+                  paymentTab === "USD" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+                }`}
+              >
+                Internacional (USD)
+              </button>
+            </div>
+
+            {paymentTab === "DOP" && (
+              <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-xl text-slate-700">
+                <p><strong>Banco BHD:</strong> 0000000000</p>
+                <p><strong>Banreservas:</strong> 0000000000</p>
+                <p><strong>Banco Popular:</strong> 0000000000</p>
+                <p className="pt-2 text-slate-500">Enviar comprobante vía WhatsApp para confirmación activa.</p>
+              </div>
+            )}
+
+            {paymentTab === "USD" && (
+              <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-xl text-slate-700">
+                <p><strong>PayPal.Me:</strong> paypal.me/tuusuario</p>
+                <p><strong>Binance Pay ID:</strong> 00000000</p>
+                <p><strong>USDT (TRC20):</strong> TXXXXXXXXXXXXXXXXXXXXXX</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsPaymentModalOpen(false)}
+              className="w-full bg-slate-900 text-white font-bold py-2 rounded-xl text-sm hover:bg-slate-800 transition-colors"
+            >
+              Entendido y Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
