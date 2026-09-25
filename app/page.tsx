@@ -25,25 +25,27 @@ import type { ProductLink, ProductStatus } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
    Sistema de diseño — PediClick
-   Un catálogo, no un dashboard: fila indexada en vez de tarjeta
-   con sombra, serif editorial para titulares, acentos cálidos.
+   Fondo blanco limpio, verde vibrante como color de acción
+   (nod a WhatsApp sin copiarlo), serif solo en el logo.
    ───────────────────────────────────────────────────────── */
 const C = {
-  paper: "#EEF0EA",
-  paperSoft: "#F7F8F4",
+  paper: "#FFFFFF",
+  paperSoft: "#F6F7F6",
   surface: "#FFFFFF",
-  ink: "#1A1D18",
-  inkSoft: "#5B6154",
-  inkFaint: "#8B9183",
-  line: "#DADFD2",
-  lineStrong: "#C3CAB8",
-  accent: "#E2A63B",
-  accentDeep: "#C68A26",
-  accentPale: "#FBEFD8",
-  trust: "#1F6B63",
-  trustPale: "#E4F0EE",
-  offer: "#B8432E",
-  offerPale: "#F6E4DF",
+  ink: "#15171A",
+  inkSoft: "#5B6066",
+  inkFaint: "#8E9298",
+  line: "#E6E8E5",
+  lineStrong: "#D3D6D1",
+  accent: "#14A76C",
+  accentDeep: "#0F8A58",
+  accentPale: "#E1F5EA",
+  trust: "#2F6FED",
+  trustPale: "#E5EDFE",
+  highlight: "#D98C1D",
+  highlightPale: "#FBEBD3",
+  offer: "#DC4B3F",
+  offerPale: "#FBE4E1",
 };
 
 const fraunces = Fraunces({
@@ -71,7 +73,7 @@ const BADGE_PRIORITY: Record<string, number> = {
 };
 
 const BADGE_META: Record<string, { label: string; color: string; pale: string }> = {
-  DESTACADO: { label: "Destacado", color: C.accentDeep, pale: C.accentPale },
+  DESTACADO: { label: "Destacado", color: C.highlight, pale: C.highlightPale },
   OFERTA: { label: "Oferta", color: C.offer, pale: C.offerPale },
   POPULAR: { label: "Popular", color: C.trust, pale: C.trustPale },
 };
@@ -118,7 +120,7 @@ function Mark({ size = 40 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <path
         d="M6 6h20a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4Z"
-        fill={C.ink}
+        fill={C.accent}
       />
       <path d="M11 15.6 14.2 19 21 11" stroke={C.paper} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -494,10 +496,7 @@ export default function Home() {
           )}
         </div>
 
-        <h1
-          className="mt-8 text-[34px] sm:text-[44px] leading-[1.08] font-medium max-w-xl"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
+        <h1 className="mt-8 text-[34px] sm:text-[46px] leading-[1.05] font-extrabold tracking-tight max-w-xl">
           Compra directo, sin intermediarios.
         </h1>
         <p className="mt-3 text-[15px] max-w-md leading-relaxed" style={{ color: C.inkSoft }}>
@@ -507,7 +506,7 @@ export default function Home() {
 
         <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]" style={{ color: C.inkSoft }}>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.trust }} />
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.accent }} />
             catálogo en vivo
           </span>
           <span>{activeCount} productos activos</span>
@@ -547,23 +546,21 @@ export default function Home() {
         </div>
 
         {/* ── Categorías ───────────────────────────────────────────── */}
-        <div className="mt-6 flex items-center gap-5 overflow-x-auto pb-1 scrollbar-none border-b" style={{ borderColor: C.line }}>
+        <div className="mt-6 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {CATEGORIES.map((cat) => {
             const active = selectedCategory === cat;
             return (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className="relative pb-3 text-[13px] font-medium whitespace-nowrap transition-colors"
-                style={{ color: active ? C.ink : C.inkFaint }}
+                className="px-4 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors border"
+                style={
+                  active
+                    ? { background: C.accent, borderColor: C.accent, color: "#FFFFFF" }
+                    : { background: C.paperSoft, borderColor: C.line, color: C.inkSoft }
+                }
               >
                 {cat}
-                {active && (
-                  <span
-                    className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
-                    style={{ background: C.accent }}
-                  />
-                )}
               </button>
             );
           })}
@@ -573,10 +570,10 @@ export default function Home() {
       <main className="max-w-3xl mx-auto px-5">
         {/* ── Pendientes de aprobación ─────────────────────────────── */}
         {isAdmin && pendingProducts.length > 0 && (
-          <div className="mt-8 rounded-2xl border p-4" style={{ borderColor: C.accent, background: C.accentPale }}>
+          <div className="mt-8 rounded-2xl border p-4" style={{ borderColor: C.highlight, background: C.highlightPale }}>
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-4 h-4" style={{ color: C.accentDeep }} />
-              <h2 className="font-semibold text-[13px]" style={{ color: C.accentDeep }}>
+              <AlertTriangle className="w-4 h-4" style={{ color: C.highlight }} />
+              <h2 className="font-semibold text-[13px]" style={{ color: C.highlight }}>
                 Pendientes de aprobación ({pendingProducts.length})
               </h2>
             </div>
@@ -612,7 +609,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <p className="text-[10px] mt-3" style={{ color: C.accentDeep }}>
+            <p className="text-[10px] mt-3" style={{ color: C.highlight }}>
               Verifica el pago en tu panel de Lemon Squeezy o PayPal antes de aprobar.
             </p>
           </div>
@@ -757,7 +754,7 @@ export default function Home() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full sm:w-auto px-4 py-2.5 rounded-lg font-semibold text-[12px] flex items-center justify-center gap-1.5 transition-colors shrink-0"
-                      style={{ background: C.accent, color: C.ink }}
+                      style={{ background: C.accent, color: "#FFFFFF" }}
                     >
                       Escribir por WhatsApp <ArrowUpRight className="w-3.5 h-3.5" />
                     </a>
@@ -794,7 +791,7 @@ export default function Home() {
 
       {/* ── Modal: acceso admin ────────────────────────────────────── */}
       {isAdminModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(26,29,24,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
           <form
             onSubmit={handleAdminLogin}
             className="w-full max-w-xs rounded-2xl p-6 shadow-xl space-y-4 text-center relative"
@@ -852,7 +849,7 @@ export default function Home() {
 
       {/* ── Formulario: crear / editar producto ────────────────────── */}
       {formMode !== "closed" && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(26,29,24,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
           {formStep === "payment" ? (
             <div
               className="w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 text-center"
@@ -860,11 +857,11 @@ export default function Home() {
             >
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
-                style={{ background: C.trustPale, color: C.trust }}
+                style={{ background: C.accentPale, color: C.accent }}
               >
                 <BadgeCheck className="w-7 h-7" />
               </div>
-              <h3 className="font-semibold text-[17px]" style={{ fontFamily: "var(--font-display)" }}>
+              <h3 className="font-bold text-[17px]">
                 Ya casi — activa tu producto
               </h3>
               <p className="text-[12px] leading-relaxed" style={{ color: C.inkSoft }}>
@@ -902,7 +899,7 @@ export default function Home() {
               style={{ background: C.surface }}
             >
               <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: C.line }}>
-                <h3 className="font-semibold text-[16px]" style={{ fontFamily: "var(--font-display)" }}>
+                <h3 className="font-bold text-[16px]">
                   {isReviewingPending
                     ? "Revisar solicitud"
                     : editingId
@@ -1061,7 +1058,7 @@ export default function Home() {
 
       {/* ── Modal: ajustes admin (PIN) ─────────────────────────────── */}
       {isConfigOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(26,29,24,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
           <form
             onSubmit={handleSaveConfig}
             className="w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4"
@@ -1105,15 +1102,15 @@ export default function Home() {
 
       {/* ── Modal: cómo pagar la suscripción ───────────────────────── */}
       {isPaymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(26,29,24,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
           <div className="w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4" style={{ background: C.surface }}>
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center"
-              style={{ background: C.trustPale, color: C.trust }}
+              style={{ background: C.accentPale, color: C.accent }}
             >
               <BadgeCheck className="w-6 h-6" />
             </div>
-            <h3 className="text-[18px] font-semibold" style={{ fontFamily: "var(--font-display)" }}>
+            <h3 className="text-[18px] font-bold">
               Producto creado
             </h3>
             <p className="text-[13px]" style={{ color: C.inkSoft }}>
@@ -1223,7 +1220,7 @@ function PaymentRow({
         type="button"
         onClick={() => onCopy(value, field)}
         className="shrink-0 flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors"
-        style={{ borderColor: C.line, color: copied ? C.trust : C.inkSoft }}
+        style={{ borderColor: C.line, color: copied ? C.accent : C.inkSoft }}
       >
         <Copy className="w-3 h-3" /> {copied ? "Copiado" : "Copiar"}
       </button>
