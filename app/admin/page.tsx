@@ -7,21 +7,23 @@ import { Plus, Trash2, Store, Package, Check, Lock, ShieldCheck } from "lucide-r
 
 /* Mismo sistema de diseño que la página principal — ver /page.tsx para el detalle. */
 const C = {
-  paper: "#EEF0EA",
-  paperSoft: "#F7F8F4",
+  paper: "#FFFFFF",
+  paperSoft: "#F6F7F6",
   surface: "#FFFFFF",
-  ink: "#1A1D18",
-  inkSoft: "#5B6154",
-  inkFaint: "#8B9183",
-  line: "#DADFD2",
-  lineStrong: "#C3CAB8",
-  accent: "#E2A63B",
-  accentDeep: "#C68A26",
-  accentPale: "#FBEFD8",
-  trust: "#1F6B63",
-  trustPale: "#E4F0EE",
-  offer: "#B8432E",
-  offerPale: "#F6E4DF",
+  ink: "#15171A",
+  inkSoft: "#5B6066",
+  inkFaint: "#8E9298",
+  line: "#E6E8E5",
+  lineStrong: "#D3D6D1",
+  accent: "#14A76C",
+  accentDeep: "#0F8A58",
+  accentPale: "#E1F5EA",
+  trust: "#2F6FED",
+  trustPale: "#E5EDFE",
+  highlight: "#D98C1D",
+  highlightPale: "#FBEBD3",
+  offer: "#DC4B3F",
+  offerPale: "#FBE4E1",
 };
 
 const fraunces = Fraunces({
@@ -43,7 +45,7 @@ function Mark({ size = 36 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <path
         d="M6 6h20a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4Z"
-        fill={C.ink}
+        fill={C.accent}
       />
       <path d="M11 15.6 14.2 19 21 11" stroke={C.paper} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -188,7 +190,7 @@ export default function AdminPage() {
         >
           <Mark size={40} />
           <div>
-            <h2 className="font-semibold text-[16px]" style={{ fontFamily: "var(--font-display)" }}>
+            <h2 className="font-bold text-[16px]">
               Acceso administrador
             </h2>
             <p className="text-[12px] mt-1" style={{ color: C.inkSoft }}>
@@ -229,7 +231,7 @@ export default function AdminPage() {
       >
         <Mark size={34} />
         <div>
-          <h1 className="font-semibold text-[15px]" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="font-bold text-[15px]">
             Panel admin — PediClick
           </h1>
           <p className="text-[12px]" style={{ color: C.inkSoft }}>
@@ -295,15 +297,15 @@ export default function AdminPage() {
         <div className="space-y-6">
           <div
             className="border p-4 rounded-2xl flex items-center justify-between"
-            style={{ background: C.trustPale, borderColor: C.trust }}
+            style={{ background: C.accentPale, borderColor: C.accent }}
           >
             <div>
-              <p className="text-[11px] font-semibold" style={{ color: C.trust }}>Tienda activa</p>
+              <p className="text-[11px] font-semibold" style={{ color: C.accentDeep }}>Tienda activa</p>
               <p className="font-semibold text-[15px]">{storeName}</p>
             </div>
             <span
               className="text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1"
-              style={{ background: C.surface, color: C.trust }}
+              style={{ background: C.surface, color: C.accentDeep }}
             >
               <Check className="w-3 h-3" /> Conectado
             </span>
@@ -407,7 +409,7 @@ export default function AdminPage() {
                       {p.badge && (
                         <span
                           className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border"
-                          style={{ color: C.accentDeep, borderColor: C.accentDeep, background: C.accentPale }}
+                          style={{ color: C.highlight, borderColor: C.highlight, background: C.highlightPale }}
                         >
                           {p.badge}
                         </span>
