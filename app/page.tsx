@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useId } from "react";
 import { Fraunces, Archivo } from "next/font/google";
 import {
   Search,
@@ -114,15 +114,35 @@ function sortProducts(list: ProductLink[]): ProductLink[] {
   });
 }
 
-/** Marca propia: burbuja de chat con confirmación — "contacto verificado", no un ícono de librería genérico. */
+/**
+ * Marca propia — monograma "P" construido a propósito para PediClick:
+ * el asta es la letra, el "bowl" es un punto de click sólido (no un
+ * aro genérico), con una mira concéntrica que remite al gesto de
+ * "clickear para pedir". Degradado sutil de dos tonos del propio verde
+ * de marca + sombra teñida en vez de una sombra negra genérica.
+ */
 function Mark({ size = 40 }: { size?: number }) {
+  const gradId = `pc-mark-${useId()}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <path
-        d="M6 6h20a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4Z"
-        fill={C.accent}
-      />
-      <path d="M11 15.6 14.2 19 21 11" stroke={C.paper} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      aria-hidden="true"
+      style={{ filter: "drop-shadow(0 3px 6px rgba(15,138,88,0.30))" }}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="3" y1="2" x2="29" y2="30" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor={C.accentDeep} />
+          <stop offset="1" stopColor={C.accent} />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="1" width="30" height="30" rx="9" fill={`url(#${gradId})`} />
+      <rect x="1.6" y="1.6" width="28.8" height="28.8" rx="8.4" stroke="#FFFFFF" strokeOpacity="0.16" />
+      <rect x="11" y="8" width="4" height="17" rx="2" fill="#FFFFFF" />
+      <circle cx="18.6" cy="12.6" r="5.4" fill="#FFFFFF" />
+      <circle cx="18.6" cy="12.6" r="2.3" fill="none" stroke={C.accentDeep} strokeOpacity="0.45" strokeWidth="1" />
     </svg>
   );
 }
