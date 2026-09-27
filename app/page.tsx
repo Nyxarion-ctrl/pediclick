@@ -851,6 +851,16 @@ export default function Home() {
               className="w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 text-center"
               style={{ background: C.surface }}
             >
+              <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+                  <span className="w-4 h-[2px] rounded-full" style={{ background: C.accent }} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+                </div>
+                <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>
+                  Paso 2 de 2 — pago
+                </span>
+              </div>
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
                 style={{ background: C.accentPale, color: C.accent }}
@@ -893,140 +903,182 @@ export default function Home() {
               style={{ background: C.surface }}
             >
               <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: C.line }}>
-                <h3 className="font-bold text-[16px]">
-                  {isReviewingPending
-                    ? "Revisar solicitud"
-                    : editingId
-                    ? "Editar producto"
-                    : formMode === "admin"
-                    ? "Publicar nuevo producto"
-                    : "Publicar mi producto"}
-                </h3>
-                <button type="button" onClick={closeForm} className="p-2 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]">
+                <div>
+                  <h3 className="font-bold text-[16px]">
+                    {isReviewingPending
+                      ? "Revisar solicitud"
+                      : editingId
+                      ? "Editar producto"
+                      : formMode === "admin"
+                      ? "Publicar nuevo producto"
+                      : "Publicar mi producto"}
+                  </h3>
+                  {formMode === "public" && !editingId && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+                        <span className="w-4 h-[2px] rounded-full" style={{ background: C.line }} />
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.line }} />
+                      </div>
+                      <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>
+                        Paso 1 de 2 — tus datos
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <button type="button" onClick={closeForm} className="p-2 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A] shrink-0">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {formMode === "public" && !editingId && (
-                <p className="text-[11px] rounded-xl p-3 border" style={{ background: C.paperSoft, borderColor: C.line, color: C.inkSoft }}>
-                  Completa tus datos y en el siguiente paso te mostraremos cómo pagar tu suscripción
-                  mensual. Tu producto se publicará en cuanto lo confirmemos.
-                </p>
+                <div className="rounded-xl p-3 flex gap-2.5 items-start" style={{ background: C.accentPale, borderLeft: `3px solid ${C.accent}` }}>
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" style={{ color: C.accentDeep }} />
+                  <p className="text-[11px] leading-relaxed" style={{ color: C.accentDeep }}>
+                    Completa tus datos y en el siguiente paso te mostraremos cómo pagar tu suscripción
+                    mensual. Tu producto se publicará en cuanto lo confirmemos.
+                  </p>
+                </div>
               )}
 
-              <div className="space-y-3">
-                <Field label="Nombre del producto / oferta *">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. Zapatillas Nike Air"
-                    value={prodName}
-                    onChange={(e) => setProdName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                    style={{ background: C.paperSoft, borderColor: C.line }}
-                  />
-                </Field>
+              <div>
+                <p className="text-[11px] font-semibold mb-1.5" style={{ color: C.inkFaint }}>
+                  Así se verá en el catálogo
+                </p>
+                <FormPreviewCard
+                  name={prodName}
+                  category={prodCat}
+                  description={prodDesc}
+                  price={prodPrice}
+                  originalPrice={prodOrigPrice}
+                  badge={prodBadge}
+                  image={prodImg}
+                />
+              </div>
 
-                <Field label="Tu número de WhatsApp *" hint='Los compradores harán clic en "Escribir por WhatsApp" y les abrirá un chat directo contigo.'>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="Ej. 8095551234 (con código de país si es posible)"
-                    value={prodWhatsapp}
-                    onChange={(e) => setProdWhatsapp(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                    style={{ background: C.paperSoft, borderColor: C.line }}
-                  />
-                </Field>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Precio ($) (opcional)">
+              <div>
+                <Section title="Producto">
+                  <Field label="Nombre del producto / oferta *">
                     <input
-                      type="number"
-                      step="0.01"
-                      placeholder="49.99"
-                      value={prodPrice}
-                      onChange={(e) => setProdPrice(e.target.value)}
+                      type="text"
+                      required
+                      placeholder="Ej. Zapatillas Nike Air"
+                      value={prodName}
+                      onChange={(e) => setProdName(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                       style={{ background: C.paperSoft, borderColor: C.line }}
                     />
                   </Field>
-                  <Field label="Precio anterior (opcional)">
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="65.00"
-                      value={prodOrigPrice}
-                      onChange={(e) => setProdOrigPrice(e.target.value)}
+
+                  <Field label="Categoría">
+                    <select
+                      value={prodCat}
+                      onChange={(e) => setProdCat(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                      style={{ background: C.paperSoft, borderColor: C.line }}
+                    >
+                      {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Descripción corta">
+                    <textarea
+                      rows={2}
+                      placeholder="Escribe brevemente sobre el producto..."
+                      value={prodDesc}
+                      onChange={(e) => setProdDesc(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none resize-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                       style={{ background: C.paperSoft, borderColor: C.line }}
                     />
                   </Field>
-                </div>
+                </Section>
 
-                <Field label="Categoría">
-                  <select
-                    value={prodCat}
-                    onChange={(e) => setProdCat(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                    style={{ background: C.paperSoft, borderColor: C.line }}
-                  >
-                    {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                {formMode === "admin" && (
+                <Section title="Precio">
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Insignia especial">
-                      <select
-                        value={prodBadge}
-                        onChange={(e) => setProdBadge(e.target.value as any)}
+                    <Field label="Precio ($) (opcional)">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="49.99"
+                        value={prodPrice}
+                        onChange={(e) => setProdPrice(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                         style={{ background: C.paperSoft, borderColor: C.line }}
-                      >
-                        <option value="NINGUNO">Ninguna</option>
-                        <option value="DESTACADO">Destacado</option>
-                        <option value="OFERTA">Oferta</option>
-                        <option value="POPULAR">Popular</option>
-                      </select>
+                      />
                     </Field>
-                    <Field label="Vence el">
+                    <Field label="Precio anterior (opcional)">
                       <input
-                        type="date"
-                        value={prodExpires}
-                        onChange={(e) => setProdExpires(e.target.value)}
+                        type="number"
+                        step="0.01"
+                        placeholder="65.00"
+                        value={prodOrigPrice}
+                        onChange={(e) => setProdOrigPrice(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                         style={{ background: C.paperSoft, borderColor: C.line }}
                       />
                     </Field>
                   </div>
+                </Section>
+
+                <Section title="Contacto">
+                  <Field label="Tu número de WhatsApp *" hint='Los compradores harán clic en "Escribir por WhatsApp" y les abrirá un chat directo contigo.'>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="Ej. 8095551234 (con código de país si es posible)"
+                      value={prodWhatsapp}
+                      onChange={(e) => setProdWhatsapp(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                      style={{ background: C.paperSoft, borderColor: C.line }}
+                    />
+                  </Field>
+                </Section>
+
+                <Section title="Foto">
+                  <Field label="Foto del producto (opcional)" hint="Pega el link de una foto que ya tengas subida (Facebook, Instagram, Google Fotos...). Si lo dejas vacío, usamos un ícono con la inicial de tu producto.">
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={prodImg}
+                      onChange={(e) => setProdImg(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                      style={{ background: C.paperSoft, borderColor: C.line }}
+                    />
+                  </Field>
+                </Section>
+
+                {formMode === "admin" && (
+                  <Section title="Configuración de administrador">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Insignia especial">
+                        <select
+                          value={prodBadge}
+                          onChange={(e) => setProdBadge(e.target.value as any)}
+                          className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                          style={{ background: C.paperSoft, borderColor: C.line }}
+                        >
+                          <option value="NINGUNO">Ninguna</option>
+                          <option value="DESTACADO">Destacado</option>
+                          <option value="OFERTA">Oferta</option>
+                          <option value="POPULAR">Popular</option>
+                        </select>
+                      </Field>
+                      <Field label="Vence el">
+                        <input
+                          type="date"
+                          value={prodExpires}
+                          onChange={(e) => setProdExpires(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                          style={{ background: C.paperSoft, borderColor: C.line }}
+                        />
+                      </Field>
+                    </div>
+                  </Section>
                 )}
-
-                <Field label="Foto del producto (link de imagen)" hint="Sube tu foto a un servicio como Imgur o Postimages y pega aquí el link directo. Si lo dejas vacío usamos un ícono propio.">
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={prodImg}
-                    onChange={(e) => setProdImg(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                    style={{ background: C.paperSoft, borderColor: C.line }}
-                  />
-                </Field>
-
-                <Field label="Descripción corta">
-                  <textarea
-                    rows={2}
-                    placeholder="Escribe brevemente sobre el producto..."
-                    value={prodDesc}
-                    onChange={(e) => setProdDesc(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none resize-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                    style={{ background: C.paperSoft, borderColor: C.line }}
-                  />
-                </Field>
               </div>
 
               <button
@@ -1156,6 +1208,91 @@ export default function Home() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="pt-4 mt-4 border-t first:mt-0 first:pt-0 first:border-t-0" style={{ borderColor: C.line }}>
+      <p className="text-[11px] font-semibold mb-2.5" style={{ color: C.inkFaint }}>
+        {title}
+      </p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function FormPreviewCard({
+  name,
+  category,
+  description,
+  price,
+  originalPrice,
+  badge,
+  image,
+}: {
+  name: string;
+  category: string;
+  description: string;
+  price: string;
+  originalPrice: string;
+  badge: string;
+  image: string;
+}) {
+  const badgeMeta = badge && badge !== "NINGUNO" ? BADGE_META[badge] : null;
+  const displayName = name.trim() || "Nombre del producto";
+  const numericPrice = parseFloat(price);
+  const numericOriginal = parseFloat(originalPrice);
+
+  return (
+    <div
+      className="rounded-xl border p-3 flex gap-3 items-start"
+      style={{ borderColor: C.line, background: C.paperSoft }}
+    >
+      <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0" style={{ background: C.surface }}>
+        <img
+          src={image || initialsPlaceholder(name || "Producto")}
+          alt=""
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = initialsPlaceholder(name || "Producto");
+          }}
+          className="w-full h-full object-cover"
+        />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="font-semibold text-[13px] truncate" style={{ color: name.trim() ? C.ink : C.inkFaint }}>
+            {displayName}
+          </p>
+          {badgeMeta && (
+            <span
+              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0"
+              style={{ color: badgeMeta.color, borderColor: badgeMeta.color, background: badgeMeta.pale }}
+            >
+              {badgeMeta.label}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] mt-0.5" style={{ color: C.inkFaint }}>
+          {category}
+        </p>
+        {description.trim() && (
+          <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: C.inkSoft }}>
+            {description}
+          </p>
+        )}
+        {!isNaN(numericPrice) && (
+          <div className="flex items-baseline gap-1.5 mt-1">
+            <span className="font-semibold text-[13px]">${numericPrice.toFixed(2)}</span>
+            {!isNaN(numericOriginal) && numericOriginal > numericPrice && (
+              <span className="text-[10px] line-through" style={{ color: C.inkFaint }}>
+                ${numericOriginal.toFixed(2)}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
