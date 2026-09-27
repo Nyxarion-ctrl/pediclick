@@ -78,6 +78,9 @@ const BADGE_META: Record<string, { label: string; color: string; pale: string }>
   POPULAR: { label: "Popular", color: C.trust, pale: C.trustPale },
 };
 
+// PIN de acceso al modo administrador (verificación en el cliente).
+const ADMIN_PIN = "1491";
+
 // TODO: reemplaza estos dos links por tus checkouts reales de suscripción mensual
 const LEMON_CHECKOUT_URL = "https://tu-tienda.lemonsqueezy.com/checkout/buy/REEMPLAZA-ESTE-ID";
 const PAYPAL_CHECKOUT_URL =
@@ -207,13 +210,6 @@ export default function Home() {
 
   useEffect(() => {
     (async () => {
-      try {
-        const res = await fetch("/api/admin/session");
-        const { isAdmin: adminFromSession } = await res.json();
-        setIsAdmin(!!adminFromSession);
-      } catch {
-        setIsAdmin(false);
-      }
       await refreshProducts();
       setLoading(false);
     })();
@@ -396,37 +392,22 @@ export default function Home() {
     }
   };
 
-  // NOTA: handleAdminLogin y handleAdminLogout no venían en el código que me pasaste.
-  // Los implementé siguiendo el mismo patrón que ya usas (/api/admin/session, /api/admin/pin).
-  // Verifica que las rutas /api/admin/login y /api/admin/logout existan tal cual en tu proyecto.
-  const handleAdminLogin = async (e: React.FormEvent) => {
+  // Verificación directa en el cliente, igual que en admin_page.tsx.
+  // Cambia ADMIN_PIN más abajo (junto a las otras constantes) para actualizar el PIN.
+  const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setPinError(false);
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: inputPin }),
-      });
-      if (!res.ok) {
-        setPinError(true);
-        return;
-      }
+    if (inputPin === ADMIN_PIN) {
       setIsAdmin(true);
       setIsAdminModalOpen(false);
       setInputPin("");
+      setPinError(false);
       showToast("Modo administrador activado");
-    } catch {
+    } else {
       setPinError(true);
     }
   };
 
-  const handleAdminLogout = async () => {
-    try {
-      await fetch("/api/admin/logout", { method: "POST" });
-    } catch {
-      // continúa el logout local aunque falle la llamada
-    }
+  const handleAdminLogout = () => {
     setIsAdmin(false);
     showToast("Sesión de administrador cerrada");
   };
