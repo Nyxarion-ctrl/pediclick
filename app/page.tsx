@@ -478,9 +478,15 @@ export default function Home() {
       className={`${fraunces.variable} ${archivo.variable} min-h-screen pb-24`}
       style={{ background: C.paper, color: C.ink, fontFamily: "var(--font-body)" }}
     >
+      <style jsx global>{`
+        @keyframes pc-toast-in {
+          from { opacity: 0; transform: translate(-50%, -8px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+      `}</style>
       {toast && (
         <div
-          className="fixed top-5 left-1/2 -translate-x-1/2 z-[60] text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg"
+          className="fixed top-5 left-1/2 z-[60] text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg animate-[pc-toast-in_0.2s_ease-out_forwards]"
           style={{ background: C.ink, color: C.paper }}
         >
           {toast}
@@ -507,8 +513,7 @@ export default function Home() {
           {isAdmin && (
             <button
               onClick={() => setIsConfigOpen(true)}
-              className="p-2 rounded-full border transition-colors"
-              style={{ borderColor: C.line, color: C.inkSoft }}
+              className="p-2 rounded-full border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-[#F6F7F6] hover:text-[#15171A]"
               title="Configuración"
             >
               <Settings className="w-4 h-4" />
@@ -551,14 +556,13 @@ export default function Home() {
               placeholder="Buscar por nombre, categoría o descripción"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-11 pr-4 py-3.5 rounded-xl border text-sm outline-none transition-colors"
+              className="w-full pl-11 pr-4 py-3.5 rounded-xl border text-sm outline-none transition-colors focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
               style={{ background: C.surface, borderColor: C.line, color: C.ink }}
             />
           </div>
           <button
             onClick={openCreateForm}
-            className="px-5 py-3.5 rounded-xl font-semibold text-[13px] flex items-center justify-center gap-1.5 transition-colors shrink-0"
-            style={{ background: C.ink, color: C.paper }}
+            className="px-5 py-3.5 rounded-xl font-semibold text-[13px] flex items-center justify-center gap-1.5 transition-colors shrink-0 bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" />
             {isAdmin ? "Publicar enlace" : "Publicar mi producto"}
@@ -573,12 +577,11 @@ export default function Home() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className="px-4 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors border"
-                style={
+                className={`px-4 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors border ${
                   active
-                    ? { background: C.accent, borderColor: C.accent, color: "#FFFFFF" }
-                    : { background: C.paperSoft, borderColor: C.line, color: C.inkSoft }
-                }
+                    ? "bg-[#14A76C] border-[#14A76C] text-white hover:bg-[#0F8A58]"
+                    : "bg-[#F6F7F6] border-[#E6E8E5] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]"
+                }`}
               >
                 {cat}
               </button>
@@ -613,15 +616,13 @@ export default function Home() {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => openEditForm(p)}
-                      className="text-[11px] font-semibold px-3 py-2 rounded-lg transition-colors"
-                      style={{ background: C.ink, color: C.paper }}
+                      className="text-[11px] font-semibold px-3 py-2 rounded-lg transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white"
                     >
                       Revisar
                     </button>
                     <button
                       onClick={() => handleRejectPending(p.id)}
-                      className="text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors"
-                      style={{ borderColor: C.line, color: C.inkSoft }}
+                      className="text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-[#F6F7F6] hover:border-[#D3D6D1]"
                     >
                       Rechazar
                     </button>
@@ -666,8 +667,7 @@ export default function Home() {
               {!isAdmin && (
                 <button
                   onClick={() => setIsAdminModalOpen(true)}
-                  className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-[12px] border transition-colors"
-                  style={{ borderColor: C.line, color: C.inkSoft }}
+                  className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-[12px] border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-[#F6F7F6] hover:border-[#D3D6D1]"
                 >
                   <Lock className="w-3.5 h-3.5" /> ¿Eres el administrador? Accede con tu PIN
                 </button>
@@ -681,7 +681,7 @@ export default function Home() {
                 return (
                   <div
                     key={p.id}
-                    className="group py-5 border-b flex flex-col sm:flex-row gap-4 items-start"
+                    className="group py-5 px-3 -mx-3 rounded-xl border-b flex flex-col sm:flex-row gap-4 items-start transition-colors hover:bg-[#F6F7F6]"
                     style={{ borderColor: C.line, opacity: expired ? 0.55 : 1 }}
                   >
                     <span
@@ -712,16 +712,14 @@ export default function Home() {
                           <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => openEditForm(p)}
-                              className="p-1.5 rounded-lg transition-colors"
-                              style={{ color: C.inkFaint }}
+                              className="p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#E1F5EA] hover:text-[#0F8A58]"
                               title="Editar producto"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteProduct(p.id)}
-                              className="p-1.5 rounded-lg transition-colors"
-                              style={{ color: C.inkFaint }}
+                              className="p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#FBE4E1] hover:text-[#DC4B3F]"
                               title="Eliminar del catálogo"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -773,8 +771,7 @@ export default function Home() {
                       href={p.targetUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full sm:w-auto px-4 py-2.5 rounded-lg font-semibold text-[12px] flex items-center justify-center gap-1.5 transition-colors shrink-0"
-                      style={{ background: C.accent, color: "#FFFFFF" }}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-lg font-semibold text-[12px] flex items-center justify-center gap-1.5 transition-colors shrink-0 bg-[#14A76C] hover:bg-[#0F8A58] text-white active:scale-[0.98]"
                     >
                       Escribir por WhatsApp <ArrowUpRight className="w-3.5 h-3.5" />
                     </a>
@@ -792,7 +789,7 @@ export default function Home() {
               if (isAdmin) handleAdminLogout();
               else setIsAdminModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 text-[11px] transition-colors mt-1"
+            className="inline-flex items-center gap-1.5 text-[11px] transition-opacity mt-1 hover:opacity-70"
           >
             {isAdmin ? (
               <>
@@ -820,8 +817,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setIsAdminModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full"
-              style={{ background: C.paperSoft, color: C.inkSoft }}
+              className="absolute top-4 right-4 p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -847,7 +843,7 @@ export default function Home() {
                   setInputPin(e.target.value);
                   setPinError(false);
                 }}
-                className="w-full text-center tracking-widest px-3.5 py-3 rounded-xl border text-sm font-semibold outline-none"
+                className="w-full text-center tracking-widest px-3.5 py-3 rounded-xl border text-sm font-semibold outline-none focus:ring-2 focus:ring-[#14A76C]/20"
                 style={{
                   background: C.paperSoft,
                   borderColor: pinError ? C.offer : C.line,
@@ -858,8 +854,7 @@ export default function Home() {
             </div>
             <button
               type="submit"
-              className="w-full font-semibold py-3 rounded-xl text-[12px]"
-              style={{ background: C.ink, color: C.paper }}
+              className="w-full font-semibold py-3 rounded-xl text-[12px] transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]"
             >
               Ingresar al panel
             </button>
@@ -893,8 +888,7 @@ export default function Home() {
                   href={LEMON_CHECKOUT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-[12px] transition-colors"
-                  style={{ background: C.ink, color: C.paper }}
+                  className="w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-[12px] transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white"
                 >
                   <CreditCard className="w-4 h-4" /> Pagar con Lemon Squeezy
                 </a>
@@ -902,8 +896,7 @@ export default function Home() {
                   href={PAYPAL_CHECKOUT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-[12px] border transition-colors"
-                  style={{ borderColor: C.line, color: C.ink }}
+                  className="w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-[12px] border transition-colors border-[#E6E8E5] text-[#15171A] hover:bg-[#F6F7F6]"
                 >
                   <CreditCard className="w-4 h-4" /> Pagar con PayPal
                 </a>
@@ -928,7 +921,7 @@ export default function Home() {
                     ? "Publicar nuevo producto"
                     : "Publicar mi producto"}
                 </h3>
-                <button type="button" onClick={closeForm} className="p-2 rounded-full" style={{ background: C.paperSoft, color: C.inkSoft }}>
+                <button type="button" onClick={closeForm} className="p-2 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -948,7 +941,7 @@ export default function Home() {
                     placeholder="Ej. Zapatillas Nike Air"
                     value={prodName}
                     onChange={(e) => setProdName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                     style={{ background: C.paperSoft, borderColor: C.line }}
                   />
                 </Field>
@@ -960,7 +953,7 @@ export default function Home() {
                     placeholder="Ej. 8095551234 (con código de país si es posible)"
                     value={prodWhatsapp}
                     onChange={(e) => setProdWhatsapp(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                     style={{ background: C.paperSoft, borderColor: C.line }}
                   />
                 </Field>
@@ -973,7 +966,7 @@ export default function Home() {
                       placeholder="49.99"
                       value={prodPrice}
                       onChange={(e) => setProdPrice(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                       style={{ background: C.paperSoft, borderColor: C.line }}
                     />
                   </Field>
@@ -984,7 +977,7 @@ export default function Home() {
                       placeholder="65.00"
                       value={prodOrigPrice}
                       onChange={(e) => setProdOrigPrice(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                       style={{ background: C.paperSoft, borderColor: C.line }}
                     />
                   </Field>
@@ -994,7 +987,7 @@ export default function Home() {
                   <select
                     value={prodCat}
                     onChange={(e) => setProdCat(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                     style={{ background: C.paperSoft, borderColor: C.line }}
                   >
                     {CATEGORIES.filter((c) => c !== "Todos").map((c) => (
@@ -1011,7 +1004,7 @@ export default function Home() {
                       <select
                         value={prodBadge}
                         onChange={(e) => setProdBadge(e.target.value as any)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                         style={{ background: C.paperSoft, borderColor: C.line }}
                       >
                         <option value="NINGUNO">Ninguna</option>
@@ -1025,7 +1018,7 @@ export default function Home() {
                         type="date"
                         value={prodExpires}
                         onChange={(e) => setProdExpires(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                         style={{ background: C.paperSoft, borderColor: C.line }}
                       />
                     </Field>
@@ -1038,7 +1031,7 @@ export default function Home() {
                     placeholder="https://..."
                     value={prodImg}
                     onChange={(e) => setProdImg(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                     style={{ background: C.paperSoft, borderColor: C.line }}
                   />
                 </Field>
@@ -1049,7 +1042,7 @@ export default function Home() {
                     placeholder="Escribe brevemente sobre el producto..."
                     value={prodDesc}
                     onChange={(e) => setProdDesc(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none resize-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none resize-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                     style={{ background: C.paperSoft, borderColor: C.line }}
                   />
                 </Field>
@@ -1058,8 +1051,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full font-semibold py-3.5 rounded-xl text-[13px] shadow-sm disabled:opacity-60"
-                style={{ background: C.ink, color: C.paper }}
+                className="w-full font-semibold py-3.5 rounded-xl text-[13px] shadow-sm disabled:opacity-60 transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]"
               >
                 {submitting
                   ? "Guardando…"
@@ -1086,7 +1078,7 @@ export default function Home() {
           >
             <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: C.line }}>
               <h3 className="font-semibold text-[15px]">Ajustes del admin</h3>
-              <button type="button" onClick={() => setIsConfigOpen(false)} className="p-1.5 rounded-full" style={{ background: C.paperSoft, color: C.inkSoft }}>
+              <button type="button" onClick={() => setIsConfigOpen(false)} className="p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1097,7 +1089,7 @@ export default function Home() {
                   placeholder="Nuevo PIN (mín. 4 caracteres)"
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                   style={{ background: C.paperSoft, borderColor: C.line }}
                 />
               </Field>
@@ -1107,13 +1099,13 @@ export default function Home() {
                   placeholder="Repite el PIN"
                   value={newPinConfirm}
                   onChange={(e) => setNewPinConfirm(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                   style={{ background: C.paperSoft, borderColor: C.line }}
                 />
               </Field>
               {pinConfigError && <p className="text-[11px] font-medium" style={{ color: C.offer }}>{pinConfigError}</p>}
             </div>
-            <button type="submit" className="w-full font-semibold py-3 rounded-xl text-[13px]" style={{ background: C.ink, color: C.paper }}>
+            <button type="submit" className="w-full font-semibold py-3 rounded-xl text-[13px] transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]">
               Guardar ajustes
             </button>
           </form>
@@ -1143,7 +1135,7 @@ export default function Home() {
                   key={tab}
                   type="button"
                   onClick={() => setPaymentTab(tab)}
-                  className="flex-1 py-2 font-semibold text-[13px] border-b-2 transition-colors"
+                  className="flex-1 py-2 font-semibold text-[13px] border-b-2 transition-colors hover:bg-[#F6F7F6]"
                   style={{
                     borderColor: paymentTab === tab ? C.accent : "transparent",
                     color: paymentTab === tab ? C.ink : C.inkFaint,
@@ -1176,8 +1168,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setIsPaymentModalOpen(false)}
-              className="w-full font-semibold py-3 rounded-xl text-[13px] transition-colors"
-              style={{ background: C.ink, color: C.paper }}
+              className="w-full font-semibold py-3 rounded-xl text-[13px] transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]"
             >
               Entendido, cerrar
             </button>
@@ -1239,7 +1230,7 @@ function PaymentRow({
       <button
         type="button"
         onClick={() => onCopy(value, field)}
-        className="shrink-0 flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors"
+        className="shrink-0 flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors hover:bg-[#EEF0EA]"
         style={{ borderColor: C.line, color: copied ? C.accent : C.inkSoft }}
       >
         <Copy className="w-3 h-3" /> {copied ? "Copiado" : "Copiar"}
