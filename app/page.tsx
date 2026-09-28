@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useId } from "react";
+import React, { useState, useEffect, useCallback, useId, useRef } from "react";
 import { Fraunces, Archivo } from "next/font/google";
 import {
   Search,
@@ -19,6 +19,7 @@ import {
   BadgeCheck,
   CreditCard,
   Copy,
+  ImagePlus,
 } from "lucide-react";
 import { products as productsService } from "@/lib/products";
 import type { ProductLink, ProductStatus } from "@/lib/types";
@@ -79,7 +80,18 @@ const BADGE_META: Record<string, { label: string; color: string; pale: string }>
 };
 
 // PIN de acceso al modo administrador (verificación en el cliente).
+// Es el PIN por defecto; desde "Ajustes del admin" se puede cambiar (queda guardado solo en ese navegador).
 const ADMIN_PIN = "1491";
+const SESSION_KEY = "pc_admin_session";
+const PIN_STORAGE_KEY = "pc_admin_pin";
+
+function currentAdminPin(): string {
+  try {
+    return localStorage.getItem(PIN_STORAGE_KEY) || ADMIN_PIN;
+  } catch {
+    return ADMIN_PIN;
+  }
+}
 
 // TODO: reemplaza estos dos links por tus checkouts reales de suscripción mensual
 const LEMON_CHECKOUT_URL = "https://tu-tienda.lemonsqueezy.com/checkout/buy/REEMPLAZA-ESTE-ID";
@@ -103,6 +115,34 @@ function initialsPlaceholder(name: string): string {
     <text x="50%" y="55%" font-family="Georgia, 'Times New Roman', serif" font-size="168" fill="${C.ink}" fill-opacity="0.14" text-anchor="middle" dominant-baseline="middle">${letter}</text>
   </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+// Lee una foto del dispositivo y la reduce (máx. 640 px, JPEG) para que cargue rápido en el catálogo.
+async function fileToCompressedDataUrl(file: File, maxSide = 640, quality = 0.82): Promise<string> {
+  const source = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("read"));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("decode"));
+    el.src = source;
+  });
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  ctx.fillStyle = "#FFFFFF"; // evita fondo negro en PNG con transparencia
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 function sortProducts(list: ProductLink[]): ProductLink[] {
@@ -188,6 +228,8 @@ export default function Home() {
   const [prodImg, setProdImg] = useState("");
   const [prodExpires, setProdExpires] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [imgProcessing, setImgProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -227,6 +269,26 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Restaura la sesión de admin dentro de la misma pestaña (sobrevive a recargar la página).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_KEY) === "1") setIsAdmin(true);
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  }, []);
+
+  // Bloquea el scroll del fondo mientras hay un modal abierto.
+  const anyModalOpen = formMode !== "closed" || isAdminModalOpen || isConfigOpen || isPaymentModalOpen;
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [anyModalOpen]);
+
   const resetForm = () => {
     setProdName("");
     setProdWhatsapp("");
@@ -260,7 +322,8 @@ export default function Home() {
     setProdCat(product.category);
     setProdBadge(product.badge ?? "NINGUNO");
     setProdDesc(product.description);
-    setProdImg(product.image);
+    // El monograma automático no es una foto real: se deja vacío para que se regenere con el nombre.
+    setProdImg(product.image.startsWith("data:image/svg+xml") ? "" : product.image);
     setProdExpires(product.expiresAt ?? "");
     setFormMode("admin");
     setFormStep("form");
@@ -362,45 +425,43 @@ export default function Home() {
     }
   };
 
-  const handleSaveConfig = async (e: React.FormEvent) => {
+  const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
     setPinConfigError("");
-    if (newPin.trim().length < 4) {
-      setPinConfigError("El PIN debe tener al menos 4 caracteres.");
+    const candidate = newPin.trim();
+    if (candidate.length < 4 || candidate.length > 8) {
+      setPinConfigError("El PIN debe tener entre 4 y 8 caracteres.");
       return;
     }
-    if (newPin !== newPinConfirm) {
+    if (candidate !== newPinConfirm.trim()) {
       setPinConfigError("Los dos PIN no coinciden.");
       return;
     }
     try {
-      const res = await fetch("/api/admin/pin", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPin }),
-      });
-      if (!res.ok) {
-        setPinConfigError("No se pudo actualizar el PIN.");
-        return;
-      }
-      setNewPin("");
-      setNewPinConfirm("");
-      setIsConfigOpen(false);
-      showToast("PIN actualizado correctamente");
+      localStorage.setItem(PIN_STORAGE_KEY, candidate);
     } catch {
-      setPinConfigError("No se pudo actualizar el PIN.");
+      setPinConfigError("Tu navegador no permite guardar el PIN.");
+      return;
     }
+    setNewPin("");
+    setNewPinConfirm("");
+    setIsConfigOpen(false);
+    showToast("PIN actualizado en este navegador");
   };
 
   // Verificación directa en el cliente, igual que en admin_page.tsx.
-  // Cambia ADMIN_PIN más abajo (junto a las otras constantes) para actualizar el PIN.
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputPin === ADMIN_PIN) {
+    if (inputPin === currentAdminPin()) {
       setIsAdmin(true);
       setIsAdminModalOpen(false);
       setInputPin("");
       setPinError(false);
+      try {
+        sessionStorage.setItem(SESSION_KEY, "1");
+      } catch {
+        /* almacenamiento no disponible */
+      }
       showToast("Modo administrador activado");
     } else {
       setPinError(true);
@@ -409,7 +470,34 @@ export default function Home() {
 
   const handleAdminLogout = () => {
     setIsAdmin(false);
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* almacenamiento no disponible */
+    }
     showToast("Sesión de administrador cerrada");
+  };
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Elige un archivo de imagen (JPG o PNG).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("La imagen pesa demasiado (máximo 10 MB).");
+      return;
+    }
+    setImgProcessing(true);
+    try {
+      setProdImg(await fileToCompressedDataUrl(file));
+    } catch {
+      showToast("No se pudo procesar la imagen. Prueba con otra.");
+    } finally {
+      setImgProcessing(false);
+    }
   };
 
   const copyToClipboard = (value: string, field: string) => {
@@ -443,10 +531,35 @@ export default function Home() {
   if (loading) {
     return (
       <div
-        className={`${archivo.variable} min-h-screen flex items-center justify-center text-sm font-medium`}
-        style={{ background: C.paper, color: C.inkFaint, fontFamily: "var(--font-body)" }}
+        className={`${archivo.variable} min-h-screen`}
+        style={{ background: C.paper, fontFamily: "var(--font-body)" }}
+        role="status"
+        aria-label="Cargando directorio"
       >
-        Cargando directorio…
+        <div className="max-w-3xl mx-auto px-5 pt-10 sm:pt-14 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-[38px] h-[38px] rounded-[11px]" style={{ background: C.line }} />
+            <div className="space-y-1.5">
+              <div className="h-4 w-24 rounded" style={{ background: C.line }} />
+              <div className="h-2.5 w-32 rounded" style={{ background: C.paperSoft }} />
+            </div>
+          </div>
+          <div className="mt-8 h-10 sm:h-12 w-4/5 max-w-md rounded-lg" style={{ background: C.line }} />
+          <div className="mt-3 h-4 w-3/5 max-w-sm rounded" style={{ background: C.paperSoft }} />
+          <div className="mt-8 h-[50px] rounded-xl" style={{ background: C.paperSoft }} />
+          <div className="mt-10 border-t" style={{ borderColor: C.line }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="py-5 flex gap-4 border-b" style={{ borderColor: C.line }}>
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl shrink-0" style={{ background: C.paperSoft }} />
+                <div className="flex-1 space-y-2.5 pt-1">
+                  <div className="h-4 w-2/3 rounded" style={{ background: C.line }} />
+                  <div className="h-3 w-1/4 rounded" style={{ background: C.paperSoft }} />
+                  <div className="h-3 w-4/5 rounded" style={{ background: C.paperSoft }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -464,10 +577,25 @@ export default function Home() {
           from { opacity: 0; transform: translate(-50%, -8px); }
           to { opacity: 1; transform: translate(-50%, 0); }
         }
+        @keyframes pc-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes pc-pop-in {
+          from { opacity: 0; transform: translateY(12px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes pc-step-in {
+          from { opacity: 0; transform: translateX(14px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pc-anim { animation: none !important; }
+        }
       `}</style>
       {toast && (
         <div
-          className="fixed top-5 left-1/2 z-[60] text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg animate-[pc-toast-in_0.2s_ease-out_forwards]"
+          className="fixed top-5 left-1/2 z-[60] text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg pc-anim animate-[pc-toast-in_0.2s_ease-out_forwards]" role="status"
           style={{ background: C.ink, color: C.paper }}
         >
           {toast}
@@ -495,7 +623,7 @@ export default function Home() {
             <button
               onClick={() => setIsConfigOpen(true)}
               className="p-2 rounded-full border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-[#F6F7F6] hover:text-[#15171A]"
-              title="Configuración"
+              title="Configuración" aria-label="Configuración del administrador"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -662,90 +790,95 @@ export default function Home() {
                 return (
                   <div
                     key={p.id}
-                    className="group py-5 px-3 -mx-3 rounded-xl border-b flex flex-col sm:flex-row gap-4 items-start transition-colors hover:bg-[#F6F7F6]"
-                    style={{ borderColor: C.line, opacity: expired ? 0.55 : 1 }}
+                    className="group relative py-5 px-3 -mx-3 rounded-xl flex flex-col sm:flex-row gap-4 sm:items-start transition-colors hover:bg-[#F6F7F6] after:absolute after:bottom-0 after:left-3 after:right-3 after:h-px after:bg-[#E6E8E5]"
+                    style={{ opacity: expired ? 0.55 : 1 }}
                   >
-                    <span
-                      className="hidden sm:block text-[12px] font-medium tabular-nums pt-1 w-6 shrink-0"
-                      style={{ color: C.inkFaint }}
-                    >
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
+                    <div className="flex gap-3 sm:gap-4 flex-1 min-w-0">
+                      <span
+                        className="hidden sm:block text-[12px] font-medium tabular-nums pt-1 w-6 shrink-0"
+                        style={{ color: C.inkFaint }}
+                      >
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
 
-                    <div
-                      className="relative w-full sm:w-24 h-32 sm:h-24 rounded-xl overflow-hidden shrink-0"
-                      style={{ background: C.paperSoft }}
-                    >
-                      <img
-                        src={p.image}
-                        alt={p.name}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = initialsPlaceholder(p.name);
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold text-[16px] leading-snug">{p.name}</h3>
-                        {isAdmin && (
-                          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => openEditForm(p)}
-                              className="p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#E1F5EA] hover:text-[#0F8A58]"
-                              title="Editar producto"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProduct(p.id)}
-                              className="p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#FBE4E1] hover:text-[#DC4B3F]"
-                              title="Eliminar del catálogo"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                      <div
+                        className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shrink-0"
+                        style={{ background: C.paperSoft }}
+                      >
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = initialsPlaceholder(p.name);
+                          }}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
 
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[12px]" style={{ color: C.inkFaint }}>
-                          {p.category}
-                        </span>
-                        {badge && (
-                          <span
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border"
-                            style={{ color: badge.color, borderColor: badge.color, background: badge.pale }}
-                          >
-                            {badge.label}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-semibold text-[15px] sm:text-[16px] leading-snug">{p.name}</h3>
+                          {isAdmin && (
+                            <div className="flex items-center gap-0.5 shrink-0 -mt-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => openEditForm(p)}
+                                className="p-2 sm:p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#E1F5EA] hover:text-[#0F8A58]"
+                                title="Editar producto"
+                                aria-label={`Editar ${p.name}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p.id)}
+                                className="p-2 sm:p-1.5 rounded-lg transition-colors text-[#8E9298] hover:bg-[#FBE4E1] hover:text-[#DC4B3F]"
+                                title="Eliminar del catálogo"
+                                aria-label={`Eliminar ${p.name}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-[12px]" style={{ color: C.inkFaint }}>
+                            {p.category}
                           </span>
-                        )}
-                      </div>
-
-                      <p className="text-[13px] mt-1.5 leading-relaxed line-clamp-2" style={{ color: C.inkSoft }}>
-                        {p.description}
-                      </p>
-
-                      {p.price && (
-                        <div className="flex items-baseline gap-2 mt-2.5">
-                          <span className="font-semibold text-[15px]">${p.price.toFixed(2)}</span>
-                          {p.originalPrice && p.originalPrice > p.price && (
-                            <span className="text-[12px] line-through" style={{ color: C.inkFaint }}>
-                              ${p.originalPrice.toFixed(2)}
+                          {badge && (
+                            <span
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+                              style={{ color: badge.color, borderColor: badge.color, background: badge.pale }}
+                            >
+                              {badge.label}
                             </span>
                           )}
                         </div>
-                      )}
 
-                      {isAdmin && expired && (
-                        <span
-                          className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
-                          style={{ color: C.offer, borderColor: C.offer, background: C.offerPale }}
-                        >
-                          <AlertTriangle className="w-3 h-3" /> Suscripción vencida
-                        </span>
-                      )}
+                        <p className="text-[13px] mt-1.5 leading-relaxed line-clamp-2" style={{ color: C.inkSoft }}>
+                          {p.description}
+                        </p>
+
+                        {p.price && (
+                          <div className="flex items-baseline gap-2 mt-2">
+                            <span className="font-semibold text-[15px]">${p.price.toFixed(2)}</span>
+                            {p.originalPrice && p.originalPrice > p.price && (
+                              <span className="text-[12px] line-through" style={{ color: C.inkFaint }}>
+                                ${p.originalPrice.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {isAdmin && expired && (
+                          <span
+                            className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+                            style={{ color: C.offer, borderColor: C.offer, background: C.offerPale }}
+                          >
+                            <AlertTriangle className="w-3 h-3" /> Suscripción vencida
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <a
@@ -789,16 +922,16 @@ export default function Home() {
 
       {/* ── Modal: acceso admin ────────────────────────────────────── */}
       {isAdminModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pc-anim animate-[pc-fade-in_0.18s_ease-out]" style={{ background: "rgba(21,23,26,0.55)" }}>
           <form
             onSubmit={handleAdminLogin}
-            className="w-full max-w-xs rounded-2xl p-6 shadow-xl space-y-4 text-center relative"
+            role="dialog" aria-modal="true" aria-label="Acceso de administrador" className="w-full max-w-xs rounded-2xl p-6 shadow-xl space-y-4 text-center relative pc-anim animate-[pc-pop-in_0.22s_ease-out]"
             style={{ background: C.surface }}
           >
             <button
               type="button"
               onClick={() => setIsAdminModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]"
+              aria-label="Cerrar" className="absolute top-4 right-4 p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -831,7 +964,7 @@ export default function Home() {
                   color: C.ink,
                 }}
               />
-              {pinError && <p className="text-[11px] font-medium mt-1" style={{ color: C.offer }}>PIN incorrecto</p>}
+              {pinError && <p className="text-[11px] font-medium mt-1" style={{ color: C.offer }} role="alert">PIN incorrecto</p>}
             </div>
             <button
               type="submit"
@@ -845,7 +978,7 @@ export default function Home() {
 
       {/* ── Formulario: crear / editar producto ────────────────────── */}
       {formMode !== "closed" && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pc-anim animate-[pc-fade-in_0.18s_ease-out]" style={{ background: "rgba(21,23,26,0.55)" }}>
           {formStep === "payment" ? (
             <div
               className="w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 text-center"
@@ -899,10 +1032,13 @@ export default function Home() {
           ) : (
             <form
               onSubmit={handleFormSubmit}
-              className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto"
+              role="dialog" aria-modal="true" aria-label="Formulario de producto" className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto pc-anim animate-[pc-pop-in_0.22s_ease-out]"
               style={{ background: C.surface }}
             >
-              <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: C.line }}>
+              <div
+                className="flex items-center justify-between pb-3 border-b sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6"
+                style={{ borderColor: C.line, background: C.surface }}
+              >
                 <div>
                   <h3 className="font-bold text-[16px]">
                     {isReviewingPending
@@ -926,7 +1062,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <button type="button" onClick={closeForm} className="p-2 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A] shrink-0">
+                <button type="button" onClick={closeForm} aria-label="Cerrar" className="p-2 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A] shrink-0">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1039,16 +1175,76 @@ export default function Home() {
                 </Section>
 
                 <Section title="Foto">
-                  <Field label="Foto del producto (opcional)" hint="Pega el link de una foto que ya tengas subida (Facebook, Instagram, Google Fotos...). Si lo dejas vacío, usamos un ícono con la inicial de tu producto.">
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={prodImg}
-                      onChange={(e) => setProdImg(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                      style={{ background: C.paperSoft, borderColor: C.line }}
-                    />
-                  </Field>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    tabIndex={-1}
+                    onChange={handlePickImage}
+                  />
+                  {prodImg.startsWith("data:image/jpeg") ? (
+                    <div
+                      className="flex items-center gap-3 rounded-xl border p-2.5"
+                      style={{ borderColor: C.line, background: C.paperSoft }}
+                    >
+                      <img
+                        src={prodImg}
+                        alt="Foto del producto"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = initialsPlaceholder(prodName || "Producto");
+                        }}
+                        className="w-14 h-14 rounded-lg object-cover shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold">Foto lista</p>
+                        <p className="text-[10px]" style={{ color: C.inkFaint }}>
+                          La ajustamos automáticamente para que cargue rápido.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-white"
+                      >
+                        Cambiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProdImg("")}
+                        className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors text-[#DC4B3F] hover:bg-[#FBE4E1]"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={imgProcessing}
+                        className="w-full flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed py-5 transition-colors border-[#D3D6D1] bg-[#F6F7F6] hover:bg-[#E1F5EA] hover:border-[#14A76C] disabled:opacity-60"
+                      >
+                        <ImagePlus className="w-5 h-5" style={{ color: C.accentDeep }} />
+                        <span className="text-[12px] font-semibold">
+                          {imgProcessing ? "Procesando foto…" : "Subir foto desde tu dispositivo"}
+                        </span>
+                        <span className="text-[10px]" style={{ color: C.inkFaint }}>
+                          JPG o PNG. La ajustamos automáticamente.
+                        </span>
+                      </button>
+                      <Field label="O pega el link de una foto (opcional)" hint="Si no subes nada, usamos un ícono con la inicial de tu producto.">
+                        <input
+                          type="url"
+                          placeholder="https://..."
+                          value={prodImg}
+                          onChange={(e) => setProdImg(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                          style={{ background: C.paperSoft, borderColor: C.line }}
+                        />
+                      </Field>
+                    </>
+                  )}
                 </Section>
 
                 {formMode === "admin" && (
@@ -1081,6 +1277,10 @@ export default function Home() {
                 )}
               </div>
 
+              <div
+                className="sticky bottom-0 z-10 -mx-6 -mb-6 px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t"
+                style={{ borderColor: C.line, background: C.surface }}
+              >
               <button
                 type="submit"
                 disabled={submitting}
@@ -1096,6 +1296,7 @@ export default function Home() {
                   ? "Publicar en el directorio"
                   : "Continuar al pago"}
               </button>
+              </div>
             </form>
           )}
         </div>
@@ -1103,15 +1304,15 @@ export default function Home() {
 
       {/* ── Modal: ajustes admin (PIN) ─────────────────────────────── */}
       {isConfigOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pc-anim animate-[pc-fade-in_0.18s_ease-out]" style={{ background: "rgba(21,23,26,0.55)" }}>
           <form
             onSubmit={handleSaveConfig}
-            className="w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4"
+            role="dialog" aria-modal="true" aria-label="Ajustes del administrador" className="w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4 pc-anim animate-[pc-pop-in_0.22s_ease-out]"
             style={{ background: C.surface }}
           >
             <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: C.line }}>
               <h3 className="font-semibold text-[15px]">Ajustes del admin</h3>
-              <button type="button" onClick={() => setIsConfigOpen(false)} className="p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]">
+              <button type="button" onClick={() => setIsConfigOpen(false)} aria-label="Cerrar" className="p-1.5 rounded-full transition-colors bg-[#F6F7F6] text-[#5B6066] hover:bg-[#E6E8E5] hover:text-[#15171A]">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1119,7 +1320,8 @@ export default function Home() {
               <Field label="Nuevo PIN de acceso">
                 <input
                   type="password"
-                  placeholder="Nuevo PIN (mín. 4 caracteres)"
+                  placeholder="Nuevo PIN (4 a 8 caracteres)"
+                  maxLength={8}
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
@@ -1130,13 +1332,17 @@ export default function Home() {
                 <input
                   type="password"
                   placeholder="Repite el PIN"
+                  maxLength={8}
                   value={newPinConfirm}
                   onChange={(e) => setNewPinConfirm(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
                   style={{ background: C.paperSoft, borderColor: C.line }}
                 />
               </Field>
-              {pinConfigError && <p className="text-[11px] font-medium" style={{ color: C.offer }}>{pinConfigError}</p>}
+              <p className="text-[10px]" style={{ color: C.inkFaint }}>
+                El nuevo PIN se guarda solo en este navegador. En otros dispositivos seguirá valiendo el PIN por defecto.
+              </p>
+              {pinConfigError && <p className="text-[11px] font-medium" style={{ color: C.offer }} role="alert">{pinConfigError}</p>}
             </div>
             <button type="submit" className="w-full font-semibold py-3 rounded-xl text-[13px] transition-colors bg-[#15171A] hover:bg-[#262A2E] text-white active:scale-[0.98]">
               Guardar ajustes
@@ -1147,8 +1353,18 @@ export default function Home() {
 
       {/* ── Modal: cómo pagar la suscripción ───────────────────────── */}
       {isPaymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(21,23,26,0.55)" }}>
-          <div className="w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4" style={{ background: C.surface }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pc-anim animate-[pc-fade-in_0.18s_ease-out]" style={{ background: "rgba(21,23,26,0.55)" }}>
+          <div role="dialog" aria-modal="true" aria-label="Cómo activar tu producto" className="w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4 pc-anim animate-[pc-pop-in_0.22s_ease-out]" style={{ background: C.surface }}>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+                <span className="w-4 h-[2px] rounded-full" style={{ background: C.accent }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+              </div>
+              <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>
+                Paso 2 de 2 — pago
+              </span>
+            </div>
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center"
               style={{ background: C.accentPale, color: C.accent }}
