@@ -229,6 +229,7 @@ export default function Home() {
   const [prodExpires, setProdExpires] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [imgProcessing, setImgProcessing] = useState(false);
+  const [showImgLink, setShowImgLink] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -298,6 +299,7 @@ export default function Home() {
     setProdBadge("NINGUNO");
     setProdDesc("");
     setProdImg("");
+    setShowImgLink(false);
     setProdExpires("");
     setEditingId(null);
     setFormStep("form");
@@ -323,7 +325,9 @@ export default function Home() {
     setProdBadge(product.badge ?? "NINGUNO");
     setProdDesc(product.description);
     // El monograma automático no es una foto real: se deja vacío para que se regenere con el nombre.
-    setProdImg(product.image.startsWith("data:image/svg+xml") ? "" : product.image);
+    const existingImg = product.image.startsWith("data:image/svg+xml") ? "" : product.image;
+    setProdImg(existingImg);
+    setShowImgLink(!!existingImg && !existingImg.startsWith("data:image/jpeg"));
     setProdExpires(product.expiresAt ?? "");
     setFormMode("admin");
     setFormStep("form");
@@ -1233,16 +1237,28 @@ export default function Home() {
                           JPG o PNG. La ajustamos automáticamente.
                         </span>
                       </button>
-                      <Field label="O pega el link de una foto (opcional)" hint="Si no subes nada, usamos un ícono con la inicial de tu producto.">
-                        <input
-                          type="url"
-                          placeholder="https://..."
-                          value={prodImg}
-                          onChange={(e) => setProdImg(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
-                          style={{ background: C.paperSoft, borderColor: C.line }}
-                        />
-                      </Field>
+                      {showImgLink ? (
+                        <Field label="Link de la foto (opcional)" hint="Si no subes nada, usamos un ícono con la inicial de tu producto.">
+                          <input
+                            type="url"
+                            autoFocus
+                            placeholder="https://..."
+                            value={prodImg}
+                            onChange={(e) => setProdImg(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
+                            style={{ background: C.paperSoft, borderColor: C.line }}
+                          />
+                        </Field>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowImgLink(true)}
+                          className="text-[11px] font-semibold self-start hover:underline"
+                          style={{ color: C.inkFaint }}
+                        >
+                          ¿Ya tienes la foto en un link? Pégalo aquí
+                        </button>
+                      )}
                     </>
                   )}
                 </Section>
