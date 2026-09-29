@@ -1036,11 +1036,11 @@ export default function Home() {
           ) : (
             <form
               onSubmit={handleFormSubmit}
-              role="dialog" aria-modal="true" aria-label="Formulario de producto" className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto pc-anim animate-[pc-pop-in_0.22s_ease-out]"
+              role="dialog" aria-modal="true" aria-label="Formulario de producto" className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto pc-anim animate-[pc-pop-in_0.22s_ease-out]"
               style={{ background: C.surface }}
             >
               <div
-                className="flex items-center justify-between pb-3 border-b sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6"
+                className="flex items-center justify-between px-6 pt-6 pb-3 border-b sticky top-0 z-10"
                 style={{ borderColor: C.line, background: C.surface }}
               >
                 <div>
@@ -1071,6 +1071,7 @@ export default function Home() {
                 </button>
               </div>
 
+              <div className="px-6 pt-4 space-y-4">
               {formMode === "public" && !editingId && (
                 <div className="rounded-xl p-3 flex gap-2.5 items-start" style={{ background: C.accentPale, borderLeft: `3px solid ${C.accent}` }}>
                   <Info className="w-4 h-4 shrink-0 mt-0.5" style={{ color: C.accentDeep }} />
@@ -1292,9 +1293,10 @@ export default function Home() {
                   </Section>
                 )}
               </div>
+              </div>
 
               <div
-                className="sticky bottom-0 z-10 -mx-6 -mb-6 px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t"
+                className="sticky bottom-0 z-10 px-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t mt-4"
                 style={{ borderColor: C.line, background: C.surface }}
               >
               <button
