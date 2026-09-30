@@ -902,6 +902,15 @@ export default function Home() {
 
         <footer className="mt-16 text-center border-t pt-8 pb-4 text-[12px] flex flex-col items-center gap-2" style={{ borderColor: C.line, color: C.inkFaint }}>
           <p className="font-medium" style={{ color: C.inkSoft }}>PediClick Directory © 2026</p>
+          <div className="flex items-center gap-3 text-[11px]">
+            <a href="/terminos" className="hover:underline" style={{ color: C.inkFaint }}>
+              Términos de uso
+            </a>
+            <span style={{ color: C.line }}>·</span>
+            <a href="/privacidad" className="hover:underline" style={{ color: C.inkFaint }}>
+              Privacidad
+            </a>
+          </div>
           <button
             onClick={() => {
               if (isAdmin) handleAdminLogout();
