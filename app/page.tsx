@@ -6,7 +6,6 @@ import {
   Search,
   ArrowUpRight,
   CheckCircle2,
-  Lock,
   Unlock,
   Plus,
   Trash2,
@@ -276,6 +275,23 @@ export default function Home() {
       if (sessionStorage.getItem(SESSION_KEY) === "1") setIsAdmin(true);
     } catch {
       /* almacenamiento no disponible */
+    }
+  }, []);
+
+  // Entrada de administrador oculta: visitar la app con "?admin" en la URL abre el
+  // modal del PIN sin que nada en la página lo anuncie. Sigue pidiendo el PIN igual
+  // (no lo guardes en la URL) — esto solo evita que el botón aparezca al público.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("admin")) {
+        setIsAdminModalOpen(true);
+        params.delete("admin");
+        const rest = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+      }
+    } catch {
+      /* noop */
     }
   }, []);
 
@@ -777,14 +793,6 @@ export default function Home() {
                   ? "Aún no hay productos publicados. Puedes agregar uno directamente o esperar solicitudes."
                   : "No hay productos disponibles en esta sección por el momento."}
               </p>
-              {!isAdmin && (
-                <button
-                  onClick={() => setIsAdminModalOpen(true)}
-                  className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-[12px] border transition-colors border-[#E6E8E5] text-[#5B6066] hover:bg-[#F6F7F6] hover:border-[#D3D6D1]"
-                >
-                  <Lock className="w-3.5 h-3.5" /> ¿Eres el administrador? Accede con tu PIN
-                </button>
-              )}
             </div>
           ) : (
             <div className="mt-3 border-t" style={{ borderColor: C.line }}>
@@ -911,25 +919,15 @@ export default function Home() {
               Privacidad
             </a>
           </div>
-          <button
-            onClick={() => {
-              if (isAdmin) handleAdminLogout();
-              else setIsAdminModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 text-[11px] transition-opacity mt-1 hover:opacity-70"
-          >
-            {isAdmin ? (
-              <>
-                <Unlock className="w-3 h-3" style={{ color: C.trust }} />
-                <span className="font-semibold" style={{ color: C.trust }}>Modo admin activo — cerrar sesión</span>
-              </>
-            ) : (
-              <>
-                <Lock className="w-3 h-3" />
-                <span>Acceso dueño / admin</span>
-              </>
-            )}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleAdminLogout}
+              className="inline-flex items-center gap-1.5 text-[11px] transition-opacity mt-1 hover:opacity-70"
+            >
+              <Unlock className="w-3 h-3" style={{ color: C.trust }} />
+              <span className="font-semibold" style={{ color: C.trust }}>Modo admin activo — cerrar sesión</span>
+            </button>
+          )}
         </footer>
       </main>
 
