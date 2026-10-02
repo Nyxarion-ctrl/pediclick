@@ -101,6 +101,18 @@ function digitsOnly(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
 }
 
+// Corrige el caso más común de error: un vendedor dominicano que escribe su número
+// local de 10 dígitos (809/829/849) sin el código de país "1" — eso rompería el link
+// de WhatsApp en silencio. Cualquier otro formato (con código de país, de otro país)
+// se deja tal cual.
+function normalizeWhatsapp(raw: string): string {
+  const d = digitsOnly(raw);
+  if (d.length === 10 && /^(809|829|849)/.test(d)) {
+    return "1" + d;
+  }
+  return d;
+}
+
 function isExpired(product: ProductLink): boolean {
   if (!product.expiresAt) return false;
   return new Date(product.expiresAt).getTime() < Date.now();
@@ -351,7 +363,7 @@ export default function Home() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const whatsappDigits = digitsOnly(prodWhatsapp);
+    const whatsappDigits = normalizeWhatsapp(prodWhatsapp);
     if (!prodName || whatsappDigits.length < 8) return;
 
     const priceText = prodPrice ? `$${prodPrice}` : "consultar";
@@ -1173,11 +1185,11 @@ export default function Home() {
                 </Section>
 
                 <Section title="Contacto">
-                  <Field label="Tu número de WhatsApp *" hint='Los compradores harán clic en "Escribir por WhatsApp" y les abrirá un chat directo contigo.'>
+                  <Field label="Tu número de WhatsApp *" hint='Los compradores harán clic en "Escribir por WhatsApp" y les abrirá un chat directo contigo. Si no eres de República Dominicana, incluye el código de tu país al inicio.'>
                     <input
                       type="tel"
                       required
-                      placeholder="Ej. 8095551234 (con código de país si es posible)"
+                      placeholder="Ej. 8095551234"
                       value={prodWhatsapp}
                       onChange={(e) => setProdWhatsapp(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border text-[13px] font-mono outline-none focus:border-[#14A76C] focus:ring-2 focus:ring-[#14A76C]/20"
